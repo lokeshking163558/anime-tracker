@@ -1,0 +1,5 @@
+{
+  "name": "AniTrack",
+  "description": "A beautiful anime tracking application with Sakura and Midnight themes, featuring Jikan API integration for smart search and comprehensive watch-time statistics.",
+  "requestFramePermissions": []
+}
