@@ -203,6 +203,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
                       max={selectedAnime.episodes || 9999}
                       value={watchedInput}
                       onChange={(e) => setWatchedInput(e.target.value)}
+                      onFocus={(e) => e.target.select()} // Auto-select on focus for better UX
                       className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-sakura-400 focus:outline-none text-slate-800 dark:text-white font-mono text-lg"
                       autoFocus
                     />
