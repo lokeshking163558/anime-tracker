@@ -188,7 +188,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
                 {selectedAnime.title}
               </h3>
               <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
-                How much have you watched?
+                How much have you already watched?
               </p>
 
               <div className="space-y-4">
@@ -203,11 +203,11 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
                       max={selectedAnime.episodes || 9999}
                       value={watchedInput}
                       onChange={(e) => setWatchedInput(e.target.value)}
-                      onFocus={(e) => e.target.select()} // Auto-select on focus for better UX
+                      onFocus={(e) => e.target.select()}
                       className="flex-1 px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:ring-2 focus:ring-sakura-400 focus:outline-none text-slate-800 dark:text-white font-mono text-lg"
                       autoFocus
                     />
-                    <div className="text-sm text-slate-400">
+                    <div className="text-sm text-slate-400 whitespace-nowrap">
                        / {selectedAnime.episodes || '?'}
                     </div>
                   </div>
@@ -217,7 +217,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
                     <button
                       type="button"
                       onClick={() => setWatchedInput(selectedAnime.episodes?.toString() || '')}
-                      className="mt-2 text-xs flex items-center gap-1 text-sakura-600 dark:text-purple-400 hover:underline"
+                      className="mt-2 text-xs flex items-center gap-1 text-sakura-600 dark:text-purple-400 hover:underline cursor-pointer"
                     >
                       <CheckCircle className="w-3 h-3" />
                       Set to Completed ({selectedAnime.episodes})
