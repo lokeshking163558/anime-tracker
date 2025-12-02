@@ -122,20 +122,40 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
     return { icon: AlertTriangle, text: msg.replace("Error:", "").trim(), color: "text-red-500 dark:text-red-400" };
   };
 
+  // Determine input classes based on state
+  const getInputClass = () => {
+    const baseClass = "w-full px-6 py-4 rounded-full glass-panel border shadow-xl focus:outline-none focus:ring-2 text-slate-700 dark:text-slate-100 placeholder-slate-400 transition-all duration-300";
+    
+    if (error) {
+      return `${baseClass} border-red-300 focus:ring-red-400`;
+    }
+    if (loading) {
+      return `${baseClass} border-sakura-300 dark:border-purple-500 shadow-[0_0_15px_rgba(244,63,104,0.2)] dark:shadow-[0_0_15px_rgba(168,85,247,0.2)]`;
+    }
+    return `${baseClass} border-sakura-200 dark:border-slate-700 focus:ring-sakura-400 dark:focus:ring-purple-500`;
+  };
+
   return (
     <div className="relative w-full max-w-2xl mx-auto z-50" ref={searchContainerRef}>
       <div className="relative flex items-center gap-2">
-        <div className="relative flex-1">
+        <div className="relative flex-1 group">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => { if (results.length > 0 || error) setShowResults(true); }}
             placeholder="Search for an anime to track..."
-            className={`w-full px-6 py-4 rounded-full glass-panel border shadow-xl focus:outline-none focus:ring-2 text-slate-700 dark:text-slate-100 placeholder-slate-400 ${error ? 'border-red-300 focus:ring-red-400' : 'border-sakura-200 dark:border-slate-700 focus:ring-sakura-400 dark:focus:ring-purple-500'}`}
+            className={getInputClass()}
           />
-          <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+          <div className={`absolute right-4 top-1/2 transform -translate-y-1/2 transition-colors duration-300 ${loading ? 'text-sakura-500 dark:text-purple-400' : 'text-slate-400'}`}>
+            {loading ? (
+              <div className="relative">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <div className="absolute inset-0 bg-sakura-400 dark:bg-purple-400 blur-sm opacity-30 animate-pulse rounded-full"></div>
+              </div>
+            ) : (
+              <Search className="w-5 h-5" />
+            )}
           </div>
         </div>
         

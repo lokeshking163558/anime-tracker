@@ -264,8 +264,9 @@ const App: React.FC = () => {
 
         <div className="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md border border-white/50 dark:border-slate-800 animate-slide-up">
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center p-4 bg-sakura-100 dark:bg-slate-800 rounded-2xl mb-4 shadow-inner">
-              <Tv className="w-8 h-8 text-sakura-600 dark:text-purple-400" />
+            <div className="mb-6 relative group inline-block">
+                <div className="absolute inset-0 bg-sakura-400 dark:bg-purple-600 blur-xl opacity-20 group-hover:opacity-40 transition-opacity rounded-full"></div>
+                <img src="/logo.png" alt="AniTrack Logo" className="w-24 h-24 relative z-10 rounded-full shadow-2xl border-4 border-white/20 dark:border-slate-700/50 object-cover" />
             </div>
             <h1 className="text-3xl font-bold mb-2 text-slate-800 dark:text-white">AniTrack</h1>
             <p className="text-slate-500 dark:text-slate-400">Track your journey through the anime world.</p>
@@ -369,8 +370,8 @@ const App: React.FC = () => {
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white/70 dark:bg-midnight-950/70 backdrop-blur-lg border-b border-sakura-100 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <Tv className="w-6 h-6 text-sakura-600 dark:text-purple-400" />
+          <div className="flex items-center space-x-3">
+            <img src="/logo.png" alt="AniTrack Logo" className="w-8 h-8 rounded-full shadow-sm object-cover" />
             <span className="font-bold text-xl tracking-tight text-slate-800 dark:text-slate-100">AniTrack</span>
           </div>
           
