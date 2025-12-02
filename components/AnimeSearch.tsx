@@ -1,18 +1,25 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Loader2, X, WifiOff, Hourglass, ServerCrash, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Search, Plus, Loader2, X, WifiOff, Hourglass, ServerCrash, AlertTriangle, CheckCircle, Sparkles } from 'lucide-react';
 import { searchAnime } from '../services/jikanService';
-import { Anime } from '../types';
+import { getAnimeRecommendations } from '../services/geminiService';
+import { Anime, WatchListEntry } from '../types';
 
 interface AnimeSearchProps {
   onAddAnime: (anime: Anime, watched: number) => void;
+  watchlist: WatchListEntry[];
 }
 
-export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
+export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist }) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Anime[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // AI State
+  const [showAiModal, setShowAiModal] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiRecommendations, setAiRecommendations] = useState<string>('');
   
   // Modal State
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
@@ -85,6 +92,22 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
     setQuery('');
   };
 
+  const handleAiRecommend = async () => {
+    setShowAiModal(true);
+    setAiLoading(true);
+    setAiRecommendations('');
+    
+    try {
+      const titles = watchlist.map(w => w.title);
+      const recs = await getAnimeRecommendations(titles);
+      setAiRecommendations(recs);
+    } catch (err) {
+      setAiRecommendations("Sorry, I couldn't generate recommendations right now.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // Helper to parse error string and return UI config
   const getErrorConfig = (msg: string) => {
     if (msg.includes("Network:")) {
@@ -101,18 +124,28 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
 
   return (
     <div className="relative w-full max-w-2xl mx-auto z-50" ref={searchContainerRef}>
-      <div className="relative">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onFocus={() => { if (results.length > 0 || error) setShowResults(true); }}
-          placeholder="Search for an anime to track..."
-          className={`w-full px-6 py-4 rounded-full glass-panel border shadow-xl focus:outline-none focus:ring-2 text-slate-700 dark:text-slate-100 placeholder-slate-400 ${error ? 'border-red-300 focus:ring-red-400' : 'border-sakura-200 dark:border-slate-700 focus:ring-sakura-400 dark:focus:ring-purple-500'}`}
-        />
-        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400">
-          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+      <div className="relative flex items-center gap-2">
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => { if (results.length > 0 || error) setShowResults(true); }}
+            placeholder="Search for an anime to track..."
+            className={`w-full px-6 py-4 rounded-full glass-panel border shadow-xl focus:outline-none focus:ring-2 text-slate-700 dark:text-slate-100 placeholder-slate-400 ${error ? 'border-red-300 focus:ring-red-400' : 'border-sakura-200 dark:border-slate-700 focus:ring-sakura-400 dark:focus:ring-purple-500'}`}
+          />
+          <div className="absolute right-4 top-1/2 transform -translate-y-1/2 text-slate-400">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+          </div>
         </div>
+        
+        <button
+          onClick={handleAiRecommend}
+          className="p-4 rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-xl hover:shadow-2xl hover:scale-105 transition-all active:scale-95"
+          title="Get AI Recommendations"
+        >
+          <Sparkles className="w-5 h-5" />
+        </button>
       </div>
 
       {showResults && (results.length > 0 || error) && (
@@ -242,6 +275,55 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime }) => {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI Recommendations Modal */}
+      {showAiModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 dark:border-slate-700 animate-slide-up relative">
+             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-6 h-6" />
+                  <h3 className="text-xl font-bold">AI Recommendations</h3>
+                </div>
+                <button 
+                  onClick={() => setShowAiModal(false)}
+                  className="absolute top-4 right-4 p-1 rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+             </div>
+             
+             <div className="p-6 max-h-[60vh] overflow-y-auto">
+                {aiLoading ? (
+                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <Loader2 className="w-10 h-10 text-indigo-500 animate-spin" />
+                    <p className="text-slate-500 dark:text-slate-400 animate-pulse">Analyzing your taste...</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4 text-slate-700 dark:text-slate-300">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+                      Based on your library of {watchlist.length} anime, here are some suggestions:
+                    </p>
+                    <div className="prose dark:prose-invert text-sm">
+                      {aiRecommendations.split('\n').map((line, i) => (
+                        <p key={i} className="mb-2">{line}</p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+             </div>
+             
+             <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-center">
+                <button 
+                  onClick={() => setShowAiModal(false)}
+                  className="px-6 py-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors"
+                >
+                  Close
+                </button>
+             </div>
           </div>
         </div>
       )}

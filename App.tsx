@@ -1,21 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup,
-  signOut, 
-  User 
-} from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  onSnapshot,
-  query
-} from 'firebase/firestore';
+import firebase from 'firebase/compat/app';
 import { auth, db, googleProvider } from './firebase';
 import { Anime, WatchListEntry, WatchHistoryItem, Theme } from './types';
 import { calculateStats } from './services/statsService';
@@ -26,7 +10,7 @@ import { ThemeToggle } from './components/ThemeToggle';
 import { Loader2, LogIn, LogOut, Tv, ArrowUpDown } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<firebase.User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [watchlist, setWatchlist] = useState<WatchListEntry[]>([]);
   const [history, setHistory] = useState<WatchHistoryItem[]>([]);
@@ -57,7 +41,7 @@ const App: React.FC = () => {
 
   // 2. Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
     });
@@ -73,10 +57,10 @@ const App: React.FC = () => {
     }
 
     // Listen to Watchlist
-    const watchlistRef = collection(db, 'users', user.uid, 'watchlist');
+    const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
     
     // Simple query without complex indexing
-    const unsubWatchlist = onSnapshot(query(watchlistRef), (snapshot) => {
+    const unsubWatchlist = watchlistRef.onSnapshot((snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -91,8 +75,8 @@ const App: React.FC = () => {
     });
 
     // Listen to History (for stats)
-    const historyRef = collection(db, 'users', user.uid, 'history');
-    const unsubHistory = onSnapshot(query(historyRef), (snapshot) => {
+    const historyRef = db.collection('users').doc(user.uid).collection('history');
+    const unsubHistory = historyRef.onSnapshot((snapshot) => {
       const hist = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -122,9 +106,9 @@ const App: React.FC = () => {
     setError('');
     try {
       if (isSignUp) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await auth.createUserWithEmailAndPassword(email, password);
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await auth.signInWithEmailAndPassword(email, password);
       }
     } catch (err: any) {
       // Clean up error message
@@ -143,7 +127,7 @@ const App: React.FC = () => {
   const handleGoogleLogin = async () => {
     setError('');
     try {
-      await signInWithPopup(auth, googleProvider);
+      await auth.signInWithPopup(googleProvider);
     } catch (err: any) {
       const message = err.message || "Google sign-in failed";
       // Check for popup closed by user
@@ -160,7 +144,7 @@ const App: React.FC = () => {
     }
   };
 
-  const handleLogout = () => signOut(auth);
+  const handleLogout = () => auth.signOut();
 
   const toggleTheme = () => {
     setTheme(prev => prev === Theme.SAKURA ? Theme.MIDNIGHT : Theme.SAKURA);
@@ -191,13 +175,13 @@ const App: React.FC = () => {
           updatedAt: now
         };
 
-        const watchlistRef = collection(db, 'users', user.uid, 'watchlist');
-        await addDoc(watchlistRef, newEntry);
+        const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
+        await watchlistRef.add(newEntry);
 
         // Record initial history if episodes > 0 so stats are accurate
         if (safeWatched > 0) {
-            const historyRef = collection(db, 'users', user.uid, 'history');
-            await addDoc(historyRef, {
+            const historyRef = db.collection('users').doc(user.uid).collection('history');
+            await historyRef.add({
                 animeId: anime.mal_id,
                 episodesDelta: safeWatched,
                 timestamp: now
@@ -225,15 +209,15 @@ const App: React.FC = () => {
         const now = new Date().toISOString();
 
         // 1. Update Watchlist Doc
-        const entryRef = doc(db, 'users', user.uid, 'watchlist', entry.id);
-        await updateDoc(entryRef, {
+        const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(entry.id);
+        await entryRef.update({
           watchedEpisodes: newAmount,
           updatedAt: now
         });
 
         // 2. Add History Entry
-        const historyRef = collection(db, 'users', user.uid, 'history');
-        await addDoc(historyRef, {
+        const historyRef = db.collection('users').doc(user.uid).collection('history');
+        await historyRef.add({
           animeId: entry.animeId,
           episodesDelta: delta,
           timestamp: now
@@ -247,8 +231,8 @@ const App: React.FC = () => {
     if (!user) return;
     if (window.confirm("Are you sure you want to remove this anime from your library?")) {
       try {
-          const entryRef = doc(db, 'users', user.uid, 'watchlist', id);
-          await deleteDoc(entryRef);
+          const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(id);
+          await entryRef.delete();
       } catch (err: any) {
           alert(`Failed to remove anime: ${err.message}`);
       }
@@ -417,7 +401,7 @@ const App: React.FC = () => {
         {/* Search Section */}
         <section className="mb-12 flex flex-col items-center">
           <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-slate-100">Add to Library</h2>
-          <AnimeSearch onAddAnime={addAnimeToLibrary} />
+          <AnimeSearch onAddAnime={addAnimeToLibrary} watchlist={watchlist} />
         </section>
 
         {/* Library Section */}
