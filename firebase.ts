@@ -27,5 +27,8 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 
+// Force the account selection screen to appear, helping with multiple accounts
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
 export { auth, db, googleProvider };
 export default app;

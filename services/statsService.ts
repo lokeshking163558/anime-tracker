@@ -1,7 +1,7 @@
-import { WatchHistoryItem, UserStats } from '../types';
+import { WatchHistoryItem, UserStats, WatchListEntry } from '../types';
 import { EPISODE_DURATION_MINUTES } from '../constants';
 
-export const calculateStats = (history: WatchHistoryItem[]): UserStats => {
+export const calculateStats = (history: WatchHistoryItem[], watchlist: WatchListEntry[] = []): UserStats => {
   const now = new Date();
   
   // Start of Day (00:00:00)
@@ -16,18 +16,14 @@ export const calculateStats = (history: WatchHistoryItem[]): UserStats => {
   let todayEpisodes = 0;
   let monthEpisodes = 0;
   let yearEpisodes = 0;
-  let lifetimeEpisodes = 0;
 
+  // Calculate activity-based stats from history
   history.forEach(item => {
     const itemDate = new Date(item.timestamp);
     const episodes = item.episodesDelta;
 
-    // We only care about positive progress for "Watch time", 
-    // though arguably rewinding/unwatching shouldn't count. 
-    // For simplicity, we count absolute value if positive, ignore negatives (correction).
+    // We only care about positive progress for "Watch time" logs
     if (episodes <= 0) return;
-
-    lifetimeEpisodes += episodes;
 
     if (itemDate >= startOfYear) {
       yearEpisodes += episodes;
@@ -39,6 +35,10 @@ export const calculateStats = (history: WatchHistoryItem[]): UserStats => {
       todayEpisodes += episodes;
     }
   });
+
+  // Calculate lifetime stats based on the current watchlist state
+  // This ensures the "Total" always reflects the sum of the library, even if history is incomplete.
+  const lifetimeEpisodes = watchlist.reduce((acc, entry) => acc + (entry.watchedEpisodes || 0), 0);
 
   return {
     todayMinutes: todayEpisodes * EPISODE_DURATION_MINUTES,

@@ -27,6 +27,7 @@ export interface WatchListEntry {
 export interface WatchHistoryItem {
   id?: string;
   animeId: number;
+  animeTitle?: string;
   episodesDelta: number;
   timestamp: string; // ISO String
 }
@@ -36,9 +37,4 @@ export interface UserStats {
   monthMinutes: number;
   yearMinutes: number;
   lifetimeMinutes: number;
-}
-
-export enum Theme {
-  SAKURA = 'sakura',
-  MIDNIGHT = 'midnight'
 }
