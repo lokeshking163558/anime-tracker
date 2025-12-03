@@ -151,7 +151,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
                </div>
             </form>
 
-            {user.providerData.some(p => p.providerId === 'password') && (
+            {user.providerData.some(p => p?.providerId === 'password') && (
                <div className="pt-2">
                  <CyberButton onClick={handlePasswordReset} className="w-full text-xs" disabled={loading}>
                     <Key className="w-4 h-4" />
