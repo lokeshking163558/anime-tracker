@@ -1,8 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Declare process to avoid TypeScript errors.
+// Vite will replace 'process.env.API_KEY' with the literal string at build time.
+declare const process: {
+  env: {
+    API_KEY: string;
+  }
+};
+
 // Initialize Gemini
-// Note: In production, it's safer to proxy these requests, but for this app we use client-side key.
-// The API key must be obtained exclusively from process.env.API_KEY
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const getAnimeRecommendations = async (userWatchlist: string[]): Promise<string> => {

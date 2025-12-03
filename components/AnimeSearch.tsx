@@ -203,7 +203,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
             
             <form onSubmit={handleConfirmAdd} className="p-4 pt-0 space-y-4">
               <p className="text-xs font-mono text-[#00ff9f] tracking-widest uppercase mb-1">
-                > Enter Existing Data
+                &gt; Enter Existing Data
               </p>
 
               <div>

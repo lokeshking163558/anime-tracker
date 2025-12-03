@@ -4,13 +4,13 @@ import react from '@vitejs/plugin-react'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/', // Standard base path for Vercel
+  base: '/', // Standard base path for Vercel/Netlify
   build: {
     outDir: 'dist',
     emptyOutDir: true,
   },
   define: {
-    // Polyfill process.env.API_KEY for the Gemini SDK
+    // Define process.env.API_KEY so it works in the browser and satisfies the SDK requirement
     'process.env.API_KEY': JSON.stringify("AIzaSyCurlCDVh1EQZXWUEuWqZMhAlzE1SQA5g0")
   }
 })
