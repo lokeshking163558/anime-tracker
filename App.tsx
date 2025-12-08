@@ -11,7 +11,7 @@ import { HistoryModal } from './components/HistoryModal';
 import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi } from 'lucide-react';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [sortType, setSortType] = useState<'updated' | 'title'>('updated');
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
   
   // Auth Form State
   const [showAuth, setShowAuth] = useState(false);
@@ -29,6 +30,18 @@ const App: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+
+  // Network Listener
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -58,11 +71,9 @@ const App: React.FC = () => {
         ...doc.data()
       })) as WatchListEntry[];
       setWatchlist(list);
-    }, (error) => {
-        console.error("Watchlist Error:", error);
-        if (error.code === 'permission-denied') {
-            setError("Database permission denied. Check Rules.");
-        }
+    }, (err) => {
+        console.error("Watchlist Sync Error:", err);
+        setError(`DATABASE ERROR: ${err.message}`);
     });
 
     const historyRef = db.collection('users').doc(user.uid).collection('history');
@@ -72,6 +83,10 @@ const App: React.FC = () => {
         ...doc.data()
       })) as WatchHistoryItem[];
       setHistory(hist);
+    }, (err) => {
+        console.error("History Sync Error:", err);
+        // Don't overwrite main error if it's just history failing
+        if (!error) setError(`HISTORY SYNC ERROR: ${err.message}`);
     });
 
     return () => {
@@ -112,7 +127,6 @@ const App: React.FC = () => {
     try {
       await auth.signInWithPopup(googleProvider);
     } catch (err: any) {
-      console.error("Google Auth Error:", err);
       
       // Handle "Popup Closed" specifically
       if (err.code === 'auth/popup-closed-by-user') {
@@ -121,14 +135,15 @@ const App: React.FC = () => {
         return;
       }
 
-      // Handle restricted environments (like StackBlitz/CodeSandbox preview iframes)
+      // Handle restricted environments (like StackBlitz/CodeSandbox/IDX preview iframes)
       if (err.code === 'auth/operation-not-supported-in-this-environment') {
         console.warn("Popup not supported, attempting redirect fallback...");
         try {
            await auth.signInWithRedirect(googleProvider);
            return; // Redirecting, so don't stop loading
         } catch (redirectErr: any) {
-           setError('Authentication unavailable in this restricted preview. Please open the app in a new tab.');
+           console.error("Redirect Fallback Failed:", redirectErr);
+           setError('Browser restricted. Please open this app in a new, standard browser tab.');
            setFormLoading(false);
            return;
         }
@@ -140,12 +155,16 @@ const App: React.FC = () => {
         return;
       }
 
+      console.error("Google Auth Error:", err);
       setError(err.message.replace('Firebase: ', ''));
       setFormLoading(false);
     }
   };
 
-  const handleLogout = () => auth.signOut();
+  const handleLogout = () => {
+      setError('');
+      auth.signOut();
+  };
 
   const addAnimeToLibrary = async (anime: Anime, initialWatched: number) => {
     if (!user) return;
@@ -182,7 +201,8 @@ const App: React.FC = () => {
             });
         }
     } catch (err: any) {
-        alert(`WRITE ERROR: ${err.message}`);
+        console.error("Write Error:", err);
+        setError(`WRITE FAILED: ${err.message}`);
     }
   };
 
@@ -207,7 +227,8 @@ const App: React.FC = () => {
           timestamp: now
         });
     } catch (err: any) {
-        alert(`UPDATE ERROR: ${err.message}`);
+        console.error("Update Error:", err);
+        setError(`UPDATE FAILED: ${err.message}`);
     }
   };
 
@@ -216,7 +237,7 @@ const App: React.FC = () => {
     try {
       await db.collection('users').doc(user.uid).collection('history').doc(id).update(updates);
     } catch (err: any) {
-      alert(`SYNC ERROR: ${err.message}`);
+      setError(`SYNC ERROR: ${err.message}`);
     }
   };
 
@@ -225,7 +246,7 @@ const App: React.FC = () => {
     try {
       await db.collection('users').doc(user.uid).collection('history').doc(id).delete();
     } catch (err: any) {
-      alert(`DELETE ERROR: ${err.message}`);
+      setError(`DELETE ERROR: ${err.message}`);
     }
   };
 
@@ -236,7 +257,7 @@ const App: React.FC = () => {
           const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(id);
           await entryRef.delete();
       } catch (err: any) {
-          alert(`PURGE ERROR: ${err.message}`);
+          setError(`PURGE ERROR: ${err.message}`);
       }
     }
   };
@@ -418,6 +439,26 @@ const App: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 relative z-10">
         
+        {/* GLOBAL ALERT BANNER */}
+        {(error || isOffline) && (
+          <div className={`mb-8 p-4 border flex items-center justify-between gap-4 animate-fade-in ${isOffline ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-[#ff0055]/10 border-[#ff0055] text-[#ff0055]'}`}>
+            <div className="flex items-center gap-3">
+               {isOffline ? <CloudOff className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
+               <div>
+                  <h3 className="font-bold font-mono tracking-wider">{isOffline ? 'OFFLINE MODE' : 'SYSTEM CRITICAL ERROR'}</h3>
+                  <p className="text-xs font-mono opacity-80">
+                     {isOffline ? 'CONNECTION LOST. DATA WILL SYNC AUTOMATICALLY WHEN ONLINE.' : error}
+                  </p>
+               </div>
+            </div>
+            {error && !isOffline && (
+                <button onClick={() => setError('')} className="p-2 hover:bg-white/10 rounded transition-colors">
+                    <X className="w-5 h-5" />
+                </button>
+            )}
+          </div>
+        )}
+
         {/* Stats Section */}
         <section className="mb-16 animate-fade-in">
           <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">

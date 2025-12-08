@@ -40,11 +40,16 @@ db.enablePersistence()
     }
   });
 
-// Set Auth Persistence to Local (survives browser restart)
-// We add a catch block because some preview environments (like iframes) block localStorage access.
+// Set Auth Persistence with Fallback Strategy
+// 1. Try LOCAL (Standard, survives close/refresh)
+// 2. Fallback to SESSION (Survives refresh, not close) - useful for iframes/previews
+// 3. Fallback to NONE (In-memory only) - last resort for strict sandboxes
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-  .catch((err) => {
-    console.warn("Auth Persistence blocked (likely restricted environment):", err.message);
+  .catch(() => {
+    return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+      .catch(() => {
+        return auth.setPersistence(firebase.auth.Auth.Persistence.NONE);
+      });
   });
 
 const googleProvider = new firebase.auth.GoogleAuthProvider();
