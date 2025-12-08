@@ -249,7 +249,7 @@ const App: React.FC = () => {
             <div className="text-center mb-10">
               <div className="flex justify-center mb-6 relative">
                  <div className="absolute inset-0 bg-[#00ff9f]/20 blur-2xl rounded-full" />
-                 <img src="public/logo.png" alt="Logo" className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_10px_rgba(0,255,159,0.6)] animate-pulse" />
+                 <img src="/logo.png" alt="Logo" className="w-24 h-24 object-contain relative z-10 drop-shadow-[0_0_10px_rgba(0,255,159,0.6)] animate-pulse" />
               </div>
               <h1 className="text-3xl font-black text-white tracking-tighter mb-1">
                  <GlitchText>ACCESS_CONTROL</GlitchText>
@@ -338,7 +338,7 @@ const App: React.FC = () => {
       <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3 group">
-            <img src="public/logo.png" alt="Logo" className="w-10 h-10 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.3)]" />
+            <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.3)]" />
             <span className="font-mono font-bold text-xl tracking-tighter text-white group-hover:text-[#00ff9f] transition-colors">
                 ANI<span className="text-[#00ff9f]">TRACK</span>
             </span>

@@ -59,7 +59,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
       <nav className="fixed top-0 w-full z-50 border-b border-[#00ff9f]/30 bg-black/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 group cursor-pointer">
-            <img src="public/logo.png" alt="Logo" className="w-10 h-10 object-contain hover:rotate-12 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.5)]" />
+            <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain hover:rotate-12 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.5)]" />
             <span className="text-2xl font-bold font-mono tracking-tighter text-white group-hover:text-[#00ff9f] transition-colors">
               ANI<span className="text-[#00ff9f]">TRACK</span>
             </span>
