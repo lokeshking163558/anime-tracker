@@ -8,11 +8,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      // Externalize dependencies that are provided via CDN in index.html (importmap)
-      // This prevents double-loading and reduces bundle size.
-      external: ['framer-motion']
-    }
+    // Removed rollupOptions to ensure all dependencies (including framer-motion) 
+    // are bundled directly into the app, preventing runtime errors on Vercel.
   },
   define: {
     // Define process.env.API_KEY so it works in the browser and satisfies the SDK requirement
