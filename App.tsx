@@ -49,7 +49,8 @@ const App: React.FC = () => {
     }
 
     const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
-    const unsubWatchlist = watchlistRef.onSnapshot((snapshot) => {
+    // includeMetadataChanges: true ensures we see local writes immediately before they sync
+    const unsubWatchlist = watchlistRef.onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -63,7 +64,7 @@ const App: React.FC = () => {
     });
 
     const historyRef = db.collection('users').doc(user.uid).collection('history');
-    const unsubHistory = historyRef.onSnapshot((snapshot) => {
+    const unsubHistory = historyRef.onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
       const hist = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()

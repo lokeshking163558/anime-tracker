@@ -25,6 +25,21 @@ const firebaseConfig = {
 const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
 const auth = firebase.auth();
 const db = firebase.firestore();
+
+// Enable Firestore Offline Persistence
+// This prevents data loss on refresh by storing reads/writes in IndexedDB
+db.enablePersistence({ synchronizeTabs: true })
+  .catch((err) => {
+    if (err.code == 'failed-precondition') {
+        console.warn("Persistence failed: Multiple tabs open");
+    } else if (err.code == 'unimplemented') {
+        console.warn("Persistence not supported by browser");
+    }
+  });
+
+// Set Auth Persistence to Local (survives browser restart)
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 
 // Force the account selection screen to appear, helping with multiple accounts
