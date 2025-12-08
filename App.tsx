@@ -11,7 +11,8 @@ import { HistoryModal } from './components/HistoryModal';
 import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff } from 'lucide-react';
+import { AmbientSound } from './components/AmbientSound';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -22,6 +23,7 @@ const App: React.FC = () => {
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [hasPendingWrites, setHasPendingWrites] = useState(false);
   
   // Auth Form State
   const [showAuth, setShowAuth] = useState(false);
@@ -68,9 +70,16 @@ const App: React.FC = () => {
     const unsubWatchlist = watchlistRef.onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
       const list = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        pending: doc.metadata.hasPendingWrites
       })) as WatchListEntry[];
+      
       setWatchlist(list);
+      
+      // Update global pending state
+      const isPending = snapshot.metadata.hasPendingWrites || list.some(i => i.pending);
+      setHasPendingWrites(isPending);
+
     }, (err) => {
         console.error("Watchlist Sync Error:", err);
         setError(`DATABASE ERROR: ${err.message}`);
@@ -137,16 +146,10 @@ const App: React.FC = () => {
 
       // Handle restricted environments (like StackBlitz/CodeSandbox/IDX preview iframes)
       if (err.code === 'auth/operation-not-supported-in-this-environment') {
-        console.warn("Popup not supported, attempting redirect fallback...");
-        try {
-           await auth.signInWithRedirect(googleProvider);
-           return; // Redirecting, so don't stop loading
-        } catch (redirectErr: any) {
-           console.error("Redirect Fallback Failed:", redirectErr);
-           setError('Browser restricted. Please open this app in a new, standard browser tab.');
-           setFormLoading(false);
-           return;
-        }
+        console.warn("Google Auth failed due to restricted environment.");
+        setError('Preview Blocked: Open this site in a new tab or use Email Login.');
+        setFormLoading(false);
+        return;
       }
 
       if (err.code === 'auth/unauthorized-domain') {
@@ -276,12 +279,18 @@ const App: React.FC = () => {
   // --- LANDING / AUTH PAGE ---
   if (!user) {
     if (!showAuth) {
-        return <HomePage onStart={() => setShowAuth(true)} isDark={true} toggleTheme={() => {}} />;
+        return (
+          <>
+            <HomePage onStart={() => setShowAuth(true)} isDark={true} toggleTheme={() => {}} />
+            <AmbientSound />
+          </>
+        );
     }
 
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-black text-white">
         <CyberBackground />
+        <AmbientSound />
         
         <button 
           onClick={() => setShowAuth(false)}
@@ -389,6 +398,7 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen relative pb-20 font-sans selection:bg-[#ff0055] selection:text-white bg-black">
       <CyberBackground />
+      <AmbientSound />
 
       {/* Header */}
       <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10">
@@ -398,6 +408,21 @@ const App: React.FC = () => {
             <span className="font-mono font-bold text-xl tracking-tighter text-white group-hover:text-[#00ff9f] transition-colors">
                 ANI<span className="text-[#00ff9f]">TRACK</span>
             </span>
+            
+            {/* Sync Status Indicator */}
+            <div className="ml-4 flex items-center gap-2 border-l border-gray-700 pl-4 h-8">
+               {hasPendingWrites ? (
+                 <div className="flex items-center gap-2 text-yellow-500 animate-pulse" title="Syncing to Cloud...">
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span className="text-[10px] font-mono font-bold hidden sm:inline">SYNCING</span>
+                 </div>
+               ) : (
+                 <div className="flex items-center gap-2 text-[#00ff9f]" title="Cloud Synced">
+                    <Cloud className="w-4 h-4" />
+                    <span className="text-[10px] font-mono font-bold hidden sm:inline">ONLINE</span>
+                 </div>
+               )}
+            </div>
           </div>
           
           <div className="flex items-center gap-6">
@@ -405,8 +430,8 @@ const App: React.FC = () => {
                 <span className="text-xs font-bold text-[#00ff9f] leading-none mb-1">
                     RUNNER: {user.displayName || 'ANON'}
                 </span>
-                <span className="text-[10px] text-gray-600 uppercase tracking-widest">
-                    ID: {user.uid.substring(0,6)}
+                <span className="text-[10px] text-gray-500 uppercase tracking-widest flex items-center gap-1">
+                    {user.email || `ID: ${user.uid.substring(0,6)}`}
                 </span>
             </div>
             
@@ -524,7 +549,7 @@ const App: React.FC = () => {
               <p className="font-mono text-gray-700 text-xs mt-2">INITIATE SEARCH PROTOCOL TO POPULATE</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {sortedWatchlist.map((entry) => (
                 <AnimeCard 
                   key={entry.id} 

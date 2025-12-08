@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Plus, Minus, Trash2, Activity } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Plus, Minus, Trash2, Activity, Cloud } from 'lucide-react';
 import { WatchListEntry } from '../types';
 import { GENRE_COLORS } from '../constants';
 
@@ -11,6 +11,14 @@ interface AnimeCardProps {
 
 export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, onRemove }) => {
   const [loading, setLoading] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  // Trigger pulse effect when watched episodes change
+  useEffect(() => {
+    setIsUpdating(true);
+    const timer = setTimeout(() => setIsUpdating(false), 700);
+    return () => clearTimeout(timer);
+  }, [entry.watchedEpisodes]);
 
   const handleUpdate = async (delta: number) => {
     const newAmount = entry.watchedEpisodes + delta;
@@ -55,6 +63,14 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
         >
           <Trash2 className="w-4 h-4" />
         </button>
+        
+        {/* Sync Indicator for Pending Writes */}
+        {entry.pending && (
+          <div className="absolute top-0 left-0 p-2 bg-yellow-500/20 text-yellow-500 backdrop-blur-sm flex items-center gap-1 font-mono text-[10px] border-r border-b border-yellow-500/50">
+             <Cloud className="w-3 h-3 animate-pulse" />
+             <span>SYNCING</span>
+          </div>
+        )}
       </div>
 
       {/* Content Section */}
@@ -82,13 +98,20 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-gray-900 h-1.5 mb-4 border border-gray-800">
+          <div className="w-full bg-gray-900 h-1.5 mb-4 border border-gray-800 overflow-hidden rounded-sm">
             <div 
-              className="bg-[#00ff9f] h-full shadow-[0_0_10px_#00ff9f] transition-all duration-500 ease-out relative"
+              className={`bg-[#00ff9f] h-full relative transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                isUpdating ? 'shadow-[0_0_20px_#00ff9f] brightness-125' : 'shadow-[0_0_5px_#00ff9f]'
+              }`}
               style={{ width: `${entry.totalEpisodes ? progress : 100}%` }}
             >
                 {/* Glitch effect on bar */}
                 <div className="absolute top-0 right-0 h-full w-1 bg-white opacity-50 animate-pulse" />
+                
+                {/* Active Update Flash Overlay */}
+                <div 
+                  className={`absolute inset-0 bg-white transition-opacity duration-500 ${isUpdating ? 'opacity-40' : 'opacity-0'}`} 
+                />
             </div>
           </div>
 

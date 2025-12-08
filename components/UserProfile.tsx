@@ -113,11 +113,11 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
             <div className="flex flex-col items-center justify-center">
                 <div className="relative w-24 h-24 mb-4 group">
                     <div className={`absolute inset-0 border-2 ${uploading ? 'border-[#ff0055] animate-spin' : 'border-[#00ff9f] border-dashed animate-spin-slow'}`}></div>
-                    <div className="absolute inset-2 bg-black rounded-full overflow-hidden border border-gray-700">
+                    <div className="absolute inset-2 bg-gray-900 rounded-full overflow-hidden border border-gray-700 flex items-center justify-center">
                         {user.photoURL ? (
                             <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover opacity-80 group-hover:opacity-50 transition-opacity" />
                         ) : (
-                            <UserIcon className="w-full h-full p-4 text-gray-600" />
+                            <UserIcon className="w-10 h-10 text-gray-500 group-hover:text-[#00ff9f] transition-colors" />
                         )}
                     </div>
                     

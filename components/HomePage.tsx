@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Ghost, Zap, Cpu, Globe, Terminal, Shield, Activity, Wifi } from 'lucide-react';
+import { Zap, Cpu, Globe, Terminal, Shield, Activity, Wifi } from 'lucide-react';
 import { CyberBackground, CyberButton, GlitchText } from './CyberUI';
 import { Logo } from './Logo';
 
@@ -85,7 +85,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
 
       {/* Hero Section */}
       <main className="relative pt-32 pb-20 px-6 max-w-7xl mx-auto z-10">
-        <div className="grid lg:grid-cols-2 gap-16 items-center min-h-[70vh]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center min-h-[70vh]">
           
           {/* Left: Text Content */}
           <div className="space-y-8">
@@ -224,7 +224,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
              <span className="font-mono text-[#ff0055] text-sm pb-1 animate-pulse">/// ACCESS GRANTED</span>
           </motion.div>
 
-          <div className="grid md:grid-cols-3 gap-8 h-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-10 h-full">
              <DataTerminal 
                delay={0}
                icon={Globe}

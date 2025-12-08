@@ -22,6 +22,7 @@ export interface WatchListEntry {
   watchedEpisodes: number;
   genres: string[];
   updatedAt: string; // ISO String
+  pending?: boolean; // True if data has not yet synced to the cloud
 }
 
 export interface WatchHistoryItem {
