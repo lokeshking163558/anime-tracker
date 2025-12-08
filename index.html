@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AniTrack - Your Anime Journey</title>
-    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -29,6 +29,8 @@
               'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
               'spin-slow': 'spin 8s linear infinite',
               'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'neon-pulse-green': 'pulseGlowGreen 3s infinite',
+              'neon-pulse-pink': 'pulseGlowPink 3s infinite',
             },
             keyframes: {
               fadeIn: {
@@ -38,6 +40,14 @@
               slideUp: {
                 '0%': { transform: 'translateY(20px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              pulseGlowGreen: {
+                '0%, 100%': { filter: 'drop-shadow(0 0 2px #00ff9f80)' },
+                '50%': { filter: 'drop-shadow(0 0 8px #00ff9f) drop-shadow(0 0 15px #00ff9f40)' },
+              },
+              pulseGlowPink: {
+                '0%, 100%': { filter: 'drop-shadow(0 0 2px #ff005580)' },
+                '50%': { filter: 'drop-shadow(0 0 8px #ff0055) drop-shadow(0 0 15px #ff005540)' },
               }
             }
           },

@@ -1,6 +1,7 @@
 import firebase from 'firebase/compat/app';
 import 'firebase/compat/auth';
 import 'firebase/compat/firestore';
+import 'firebase/compat/storage';
 
 // ------------------------------------------------------------------
 // CONFIGURATION
@@ -25,6 +26,7 @@ const firebaseConfig = {
 const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
 const auth = firebase.auth();
 const db = firebase.firestore();
+const storage = firebase.storage();
 
 // Enable Firestore Offline Persistence
 // This prevents data loss on refresh by storing reads/writes in IndexedDB
@@ -45,5 +47,5 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 // Force the account selection screen to appear, helping with multiple accounts
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export { auth, db, googleProvider };
+export { auth, db, googleProvider, storage };
 export default app;

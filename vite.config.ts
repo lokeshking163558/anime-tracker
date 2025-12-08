@@ -8,6 +8,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      // Externalize dependencies that are provided via CDN in index.html (importmap)
+      // This prevents double-loading and reduces bundle size.
+      external: ['framer-motion']
+    }
   },
   define: {
     // Define process.env.API_KEY so it works in the browser and satisfies the SDK requirement

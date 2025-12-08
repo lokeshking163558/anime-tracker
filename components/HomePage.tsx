@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Ghost, Zap, Cpu, Globe, Terminal, Shield, Activity, Wifi } from 'lucide-react';
 import { CyberBackground, CyberButton, GlitchText } from './CyberUI';
+import { Logo } from './Logo';
 
 interface HomePageProps {
   onStart: () => void;
@@ -59,7 +60,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
       <nav className="fixed top-0 w-full z-50 border-b border-[#00ff9f]/30 bg-black/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-3 group cursor-pointer">
-            <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain hover:rotate-12 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.5)]" />
+            <Logo className="w-10 h-10 hover:rotate-12 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.5)]" />
             <span className="text-2xl font-bold font-mono tracking-tighter text-white group-hover:text-[#00ff9f] transition-colors">
               ANI<span className="text-[#00ff9f]">TRACK</span>
             </span>
@@ -72,7 +73,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
             </div>
             <button 
               onClick={onStart}
-              className="relative px-6 py-2 bg-[#ff0055]/10 border border-[#ff0055] text-[#ff0055] font-mono text-sm font-bold uppercase tracking-wider hover:bg-[#ff0055] hover:text-white hover:shadow-[0_0_20px_#ff0055] transition-all duration-300"
+              className="relative px-6 py-2 bg-[#ff0055]/10 border border-[#ff0055] text-[#ff0055] font-mono text-sm font-bold uppercase tracking-wider hover:bg-[#ff0055] hover:text-white hover:shadow-[0_0_20px_#ff0055] transition-all duration-300 animate-neon-pulse-pink"
               style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
             >
               Sign In
@@ -115,7 +116,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
               transition={{ delay: 0.4, duration: 0.6 }}
               className="flex flex-wrap gap-6"
             >
-              <CyberButton onClick={onStart} primary>
+              <CyberButton onClick={onStart} primary className="animate-neon-pulse-green">
                 <Zap className="w-5 h-5" />
                 Initialize
               </CyberButton>
