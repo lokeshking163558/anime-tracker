@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
+  const [formLoading, setFormLoading] = useState(false);
 
   // Auth Listener
   useEffect(() => {
@@ -91,6 +92,7 @@ const App: React.FC = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFormLoading(true);
     try {
       if (isSignUp) {
         await auth.createUserWithEmailAndPassword(email, password);
@@ -99,11 +101,14 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setFormLoading(false);
     }
   };
 
   const handleGoogleLogin = async () => {
     setError('');
+    setFormLoading(true);
     try {
       await auth.signInWithPopup(googleProvider);
     } catch (err: any) {
@@ -117,6 +122,8 @@ const App: React.FC = () => {
         return;
       }
       setError(err.message.replace('Firebase: ', ''));
+    } finally {
+      setFormLoading(false);
     }
   };
 
@@ -284,8 +291,15 @@ const App: React.FC = () => {
                 </div>
               )}
 
-              <CyberButton type="submit" primary className="w-full">
-                {isSignUp ? 'Initialize_Account' : 'Jack_In'}
+              <CyberButton type="submit" primary className="w-full" disabled={formLoading}>
+                {formLoading ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>PROCESSING...</span>
+                  </div>
+                ) : (
+                  isSignUp ? 'Initialize_Account' : 'Jack_In'
+                )}
               </CyberButton>
             </form>
 
@@ -301,7 +315,8 @@ const App: React.FC = () => {
             <button 
               type="button"
               onClick={handleGoogleLogin}
-              className="mt-6 w-full py-3 border border-gray-800 hover:border-white text-gray-400 hover:text-white font-mono text-xs transition-colors flex items-center justify-center gap-3 bg-transparent uppercase tracking-wider group"
+              disabled={formLoading}
+              className={`mt-6 w-full py-3 border border-gray-800 hover:border-white text-gray-400 hover:text-white font-mono text-xs transition-colors flex items-center justify-center gap-3 bg-transparent uppercase tracking-wider group ${formLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               <svg className="w-4 h-4 fill-current transition-colors" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />

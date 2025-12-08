@@ -13,9 +13,10 @@ interface HomePageProps {
 const DataTerminal: React.FC<{ icon: any; title: string; desc: string; delay: number }> = ({ icon: Icon, title, desc, delay }) => {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.5 }}
+      initial={{ opacity: 0, y: 50 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ delay, duration: 0.6, ease: "easeOut" }}
       className="group relative h-full"
     >
       <div 
@@ -212,26 +213,32 @@ export const HomePage: React.FC<HomePageProps> = ({ onStart }) => {
 
         {/* Features */}
         <div className="mt-32">
-          <div className="flex items-end gap-4 mb-12 border-b border-gray-800 pb-4">
+          <motion.div 
+            initial={{ opacity: 0, x: -20 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.5 }}
+            className="flex items-end gap-4 mb-12 border-b border-gray-800 pb-4"
+          >
              <h2 className="text-3xl font-bold text-white">SYSTEM_MODULES</h2>
              <span className="font-mono text-[#ff0055] text-sm pb-1 animate-pulse">/// ACCESS GRANTED</span>
-          </div>
+          </motion.div>
 
           <div className="grid md:grid-cols-3 gap-8 h-full">
              <DataTerminal 
-               delay={0.2}
+               delay={0}
                icon={Globe}
                title="JIKAN_UPLINK"
                desc="Direct neural link to the Jikan API. Retrieve metadata, cover art, and synopsis data with zero latency."
              />
              <DataTerminal 
-               delay={0.4}
+               delay={0.2}
                icon={Cpu}
                title="CHRONO_SYNC"
                desc="Advanced algorithms calculate your total immersion time in the network. Track minutes, hours, and lifetime stats."
              />
              <DataTerminal 
-               delay={0.6}
+               delay={0.4}
                icon={Shield}
                title="SECURE_VAULT"
                desc="Firebase encrypted cloud storage ensures your watchlist data persists across all your devices and realities."
