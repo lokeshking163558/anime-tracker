@@ -30,7 +30,8 @@ const storage = firebase.storage();
 
 // Enable Firestore Offline Persistence
 // This prevents data loss on refresh by storing reads/writes in IndexedDB
-db.enablePersistence({ synchronizeTabs: true })
+// Note: We removed { synchronizeTabs: true } to avoid the 'enableMultiTabIndexedDbPersistence' deprecation warning.
+db.enablePersistence()
   .catch((err) => {
     if (err.code == 'failed-precondition') {
         console.warn("Persistence failed: Multiple tabs open");
@@ -40,7 +41,11 @@ db.enablePersistence({ synchronizeTabs: true })
   });
 
 // Set Auth Persistence to Local (survives browser restart)
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+// We add a catch block because some preview environments (like iframes) block localStorage access.
+auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+  .catch((err) => {
+    console.warn("Auth Persistence blocked (likely restricted environment):", err.message);
+  });
 
 const googleProvider = new firebase.auth.GoogleAuthProvider();
 
