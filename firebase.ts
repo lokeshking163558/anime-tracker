@@ -21,11 +21,10 @@ const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : fir
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// RESOLVED: experimentalForceLongPolling and experimentalAutoDetectLongPolling are mutually exclusive.
-// We explicitly set auto-detect to false to allow forced long polling.
+// Transport optimization: Remove forced long polling to allow standard WebSockets
+// which are generally more stable and faster in modern environments.
 db.settings({
-  experimentalForceLongPolling: true,
-  experimentalAutoDetectLongPolling: false
+  experimentalAutoDetectLongPolling: true
 });
 
 const storage = firebase.storage();

@@ -124,9 +124,11 @@ const App: React.FC = () => {
       const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
       const historyRef = db.collection('users').doc(user.uid).collection('history');
       
+      // Removed { source: 'server' } to allow Firestore to handle transport gracefully.
+      // It will still attempt to reach the server but won't crash if it uses local cache.
       const [wSnap, hSnap] = await Promise.all([
-        watchlistRef.get({ source: 'server' }),
-        historyRef.get({ source: 'server' })
+        watchlistRef.get(),
+        historyRef.get()
       ]);
       
       const wList = wSnap.docs.map(doc => ({ 
@@ -145,7 +147,9 @@ const App: React.FC = () => {
       setHistory(hList);
       setLastSyncTime(new Date());
     } catch (err: any) {
-      setError("SYNC_LINK_TIMEOUT: Retrying with local cache.");
+      console.error("Sync error:", err);
+      // Soft error message
+      setError("UPLINK_DELAY: Operation continuing with local buffer.");
     } finally {
       setIsSyncing(false);
     }
