@@ -13,7 +13,7 @@ import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
 import { AmbientSound } from './components/AmbientSound';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, CloudUpload } from 'lucide-react';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, UploadCloud } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -39,7 +39,6 @@ const App: React.FC = () => {
   const [formLoading, setFormLoading] = useState(false);
 
   // Debounce and Sync Refs
-  // Fix: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> to resolve 'Cannot find namespace NodeJS' error in browser environment.
   const syncQueue = useRef<Record<string, { timer: ReturnType<typeof setTimeout>, delta: number, initialWatched: number }>>({});
 
   // Apply theme to document
@@ -436,7 +435,7 @@ const App: React.FC = () => {
             <button onClick={syncData} className="ml-4 flex items-center gap-2 border-l border-gray-800 pl-4 h-8 group/sync">
                {hasPendingWrites || isSyncing || pendingOpsCount > 0 ? (
                  <div className="flex items-center gap-2 text-amber-500 animate-pulse">
-                    <CloudUpload className="w-3.5 h-3.5 animate-bounce" />
+                    <UploadCloud className="w-3.5 h-3.5 animate-bounce" />
                     <span className="text-[10px] font-mono font-bold hidden md:inline">
                       {pendingOpsCount > 0 ? `${pendingOpsCount} PENDING_OPS` : 'UPLINKING...'}
                     </span>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, CloudUpload } from 'lucide-react';
+import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, UploadCloud } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WatchListEntry } from '../types';
 import { GENRE_COLORS } from '../constants';
@@ -30,7 +30,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     e.stopPropagation();
     const newAmount = optimisticWatched + delta;
     if (newAmount < 0) return;
-    if (entry.totalEpisodes && newAmount > entry.totalEpisodes) return;
+    if (entry.totalEpisodes !== null && newAmount > entry.totalEpisodes) return;
     
     setOptimisticWatched(newAmount);
     onUpdateEpisodes(entry, newAmount);
@@ -41,7 +41,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     onRemove(entry.id);
   };
 
-  const progress = entry.totalEpisodes 
+  const progress = entry.totalEpisodes !== null 
     ? (optimisticWatched / entry.totalEpisodes) * 100 
     : 0;
 
@@ -79,7 +79,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
         
         {entry.pending && (
           <div className="absolute top-2 right-12 p-1.5 bg-amber-500/20 text-amber-500 backdrop-blur-sm flex items-center gap-1 font-mono text-[9px] border border-amber-500/50 z-10">
-             <CloudUpload className="w-2.5 h-2.5 animate-bounce" />
+             <UploadCloud className="w-2.5 h-2.5 animate-bounce" />
              <span className="tracking-tighter">PENDING_SYNC</span>
           </div>
         )}
@@ -101,7 +101,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
                <Activity className="w-3 h-3" /> PROGRESS
             </span>
             <span className={entry.pending ? 'text-amber-500' : 'text-[var(--text-color)]'}>
-              {optimisticWatched} <span className="text-gray-500">/ {entry.totalEpisodes || '?'}</span>
+              {optimisticWatched} <span className="text-gray-500">/ {entry.totalEpisodes !== null ? entry.totalEpisodes : '?'}</span>
             </span>
           </div>
 
@@ -114,7 +114,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
                     ? 'bg-accent shadow-[0_0_20px_var(--accent-color)] brightness-125' 
                     : 'bg-accent shadow-[0_0_5px_var(--accent-dim)]'
               }`}
-              style={{ width: `${entry.totalEpisodes ? progress : 100}%` }}
+              style={{ width: `${entry.totalEpisodes !== null ? progress : 100}%` }}
             >
                 {entry.pending && (
                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent animate-[shimmer_1.5s_infinite]" 
