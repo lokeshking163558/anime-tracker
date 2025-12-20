@@ -10,8 +10,8 @@ export interface Anime {
   };
   episodes: number | null;
   genres: { name: string }[];
-  score?: number;
-  synopsis?: string;
+  score: number | null;
+  synopsis: string | null;
 }
 
 export interface ThemeSettings {
@@ -30,8 +30,8 @@ export interface WatchListEntry {
   genres: string[];
   updatedAt: string; // ISO String
   pending?: boolean; // True if data has not yet synced to the cloud
-  score?: number;
-  synopsis?: string;
+  score: number | null;
+  synopsis: string | null;
 }
 
 export interface WatchHistoryItem {

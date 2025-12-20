@@ -256,8 +256,8 @@ const App: React.FC = () => {
       totalEpisodes: anime.episodes,
       watchedEpisodes: initialWatched,
       genres: anime.genres.map(g => g.name),
-      score: anime.score || null,
-      synopsis: anime.synopsis || "",
+      score: anime.score ?? null,
+      synopsis: anime.synopsis ?? null,
       updatedAt: new Date().toISOString(),
       pending: true
     };
@@ -275,8 +275,8 @@ const App: React.FC = () => {
           totalEpisodes: anime.episodes,
           watchedEpisodes: initialWatched,
           genres: anime.genres.map(g => g.name),
-          score: anime.score || null,
-          synopsis: anime.synopsis || "",
+          score: anime.score ?? null,
+          synopsis: anime.synopsis ?? null,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
@@ -334,7 +334,6 @@ const App: React.FC = () => {
     // 2. Debounce Cloud Sync
     if (syncQueue.current[entry.id]) {
       clearTimeout(syncQueue.current[entry.id].timer);
-      const prevDelta = syncQueue.current[entry.id].delta;
       const initialWatched = syncQueue.current[entry.id].initialWatched;
       
       syncQueue.current[entry.id] = {
