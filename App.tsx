@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import firebase from 'firebase/compat/app';
 import { auth, db, googleProvider } from './firebase';
-import { Anime, WatchListEntry, WatchHistoryItem } from './types';
+import { Anime, WatchListEntry, WatchHistoryItem, ThemeSettings } from './types';
 import { calculateStats } from './services/statsService';
 import { AnimeSearch } from './components/AnimeSearch';
 import { AnimeCard } from './components/AnimeCard';
@@ -12,7 +13,7 @@ import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
 import { AmbientSound } from './components/AmbientSound';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw } from 'lucide-react';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, CloudUpload } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -24,6 +25,10 @@ const App: React.FC = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [hasPendingWrites, setHasPendingWrites] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [themeSettings, setThemeSettings] = useState<ThemeSettings | null>(null);
+  const [pendingOpsCount, setPendingOpsCount] = useState(0);
   
   // Auth Form State
   const [showAuth, setShowAuth] = useState(false);
@@ -32,6 +37,40 @@ const App: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [error, setError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
+
+  // Debounce and Sync Refs
+  // Fix: Replaced NodeJS.Timeout with ReturnType<typeof setTimeout> to resolve 'Cannot find namespace NodeJS' error in browser environment.
+  const syncQueue = useRef<Record<string, { timer: ReturnType<typeof setTimeout>, delta: number, initialWatched: number }>>({});
+
+  // Apply theme to document
+  useEffect(() => {
+    const root = document.documentElement;
+    if (themeSettings) {
+      root.style.setProperty('--accent-color', themeSettings.accentColor);
+      try {
+        const hex = themeSettings.accentColor.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        root.style.setProperty('--accent-dim', `rgba(${r}, ${g}, ${b}, 0.2)`);
+      } catch (e) {
+        root.style.setProperty('--accent-dim', `rgba(0, 255, 159, 0.2)`);
+      }
+
+      if (themeSettings.mode === 'light') {
+        root.classList.add('light');
+        root.classList.remove('dark');
+      } else {
+        root.classList.add('dark');
+        root.classList.remove('light');
+      }
+    } else {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      root.style.setProperty('--accent-color', '#00ff9f');
+      root.style.setProperty('--accent-dim', 'rgba(0, 255, 159, 0.2)');
+    }
+  }, [themeSettings]);
 
   // Network Listener
   useEffect(() => {
@@ -57,7 +96,62 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Data Listeners
+  // Theme Listener
+  useEffect(() => {
+    if (!user) return;
+    const unsub = db.collection('users').doc(user.uid).onSnapshot((doc) => {
+      if (doc.exists) {
+        const data = doc.data();
+        if (data?.theme) {
+          setThemeSettings(data.theme);
+        }
+      }
+    });
+    return () => unsub();
+  }, [user]);
+
+  const formatFirestoreDate = (val: any): string => {
+    if (!val) return new Date().toISOString();
+    if (typeof val.toDate === 'function') return val.toDate().toISOString();
+    return val;
+  };
+
+  const syncData = async () => {
+    if (!user) return;
+    setIsSyncing(true);
+    setError('');
+
+    try {
+      const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
+      const historyRef = db.collection('users').doc(user.uid).collection('history');
+      
+      const [wSnap, hSnap] = await Promise.all([
+        watchlistRef.get({ source: 'server' }),
+        historyRef.get({ source: 'server' })
+      ]);
+      
+      const wList = wSnap.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        updatedAt: formatFirestoreDate(doc.get('updatedAt'))
+      })) as WatchListEntry[];
+      
+      const hList = hSnap.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        timestamp: formatFirestoreDate(doc.get('timestamp'))
+      })) as WatchHistoryItem[];
+      
+      setWatchlist(wList);
+      setHistory(hList);
+      setLastSyncTime(new Date());
+    } catch (err: any) {
+      setError("SYNC_LINK_TIMEOUT: Retrying with local cache.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       setWatchlist([]);
@@ -65,42 +159,46 @@ const App: React.FC = () => {
       return;
     }
 
-    const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
-    // includeMetadataChanges: true ensures we see local writes immediately before they sync
-    const unsubWatchlist = watchlistRef.onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        pending: doc.metadata.hasPendingWrites
-      })) as WatchListEntry[];
+    const userRef = db.collection('users').doc(user.uid);
+    
+    const unsubWatchlist = userRef.collection('watchlist').onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+      const list = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          updatedAt: formatFirestoreDate(data.updatedAt),
+          pending: doc.metadata.hasPendingWrites
+        };
+      }) as WatchListEntry[];
       
       setWatchlist(list);
-      
-      // Update global pending state
-      const isPending = snapshot.metadata.hasPendingWrites || list.some(i => i.pending);
-      setHasPendingWrites(isPending);
-
-    }, (err) => {
-        console.error("Watchlist Sync Error:", err);
-        setError(`DATABASE ERROR: ${err.message}`);
+      setHasPendingWrites(snapshot.metadata.hasPendingWrites);
+      if (!snapshot.metadata.hasPendingWrites) {
+        setLastSyncTime(new Date());
+      }
     });
 
-    const historyRef = db.collection('users').doc(user.uid).collection('history');
-    const unsubHistory = historyRef.onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
-      const hist = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as WatchHistoryItem[];
+    const unsubHistory = userRef.collection('history').onSnapshot((snapshot) => {
+      const hist = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          ...data,
+          timestamp: formatFirestoreDate(data.timestamp)
+        };
+      }) as WatchHistoryItem[];
       setHistory(hist);
-    }, (err) => {
-        console.error("History Sync Error:", err);
-        // Don't overwrite main error if it's just history failing
-        if (!error) setError(`HISTORY SYNC ERROR: ${err.message}`);
+    });
+
+    const unsubSync = db.onSnapshotsInSync(() => {
+      setHasPendingWrites(false);
     });
 
     return () => {
       unsubWatchlist();
       unsubHistory();
+      unsubSync();
     };
   }, [user]);
 
@@ -136,29 +234,6 @@ const App: React.FC = () => {
     try {
       await auth.signInWithPopup(googleProvider);
     } catch (err: any) {
-      
-      // Handle "Popup Closed" specifically
-      if (err.code === 'auth/popup-closed-by-user') {
-        setError('Login cancelled by user.');
-        setFormLoading(false);
-        return;
-      }
-
-      // Handle restricted environments (like StackBlitz/CodeSandbox/IDX preview iframes)
-      if (err.code === 'auth/operation-not-supported-in-this-environment') {
-        console.warn("Google Auth failed due to restricted environment.");
-        setError('Preview Blocked: Open this site in a new tab or use Email Login.');
-        setFormLoading(false);
-        return;
-      }
-
-      if (err.code === 'auth/unauthorized-domain') {
-        setError('Domain not authorized. Check Firebase Console.');
-        setFormLoading(false);
-        return;
-      }
-
-      console.error("Google Auth Error:", err);
       setError(err.message.replace('Firebase: ', ''));
       setFormLoading(false);
     }
@@ -171,202 +246,161 @@ const App: React.FC = () => {
 
   const addAnimeToLibrary = async (anime: Anime, initialWatched: number) => {
     if (!user) return;
-    const existing = watchlist.find(w => w.animeId === anime.mal_id);
-    if (existing) {
-      alert("ENTRY ALREADY EXISTS IN DATABASE.");
-      return;
-    }
-
-    const safeWatched = Math.max(0, isNaN(initialWatched) ? 0 : initialWatched);
+    
+    // Optimistic UI for Adding
+    const tempId = `temp-${Date.now()}`;
+    const tempEntry: WatchListEntry = {
+      id: tempId,
+      animeId: anime.mal_id,
+      title: anime.title,
+      imageUrl: anime.images.jpg.large_image_url,
+      totalEpisodes: anime.episodes,
+      watchedEpisodes: initialWatched,
+      genres: anime.genres.map(g => g.name),
+      score: anime.score || null,
+      synopsis: anime.synopsis || "",
+      updatedAt: new Date().toISOString(),
+      pending: true
+    };
+    
+    setWatchlist(prev => [tempEntry, ...prev]);
 
     try {
-        const now = new Date().toISOString();
-        const newEntry: Omit<WatchListEntry, 'id'> = {
+        const batch = db.batch();
+        const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist').doc();
+        
+        batch.set(watchlistRef, {
           animeId: anime.mal_id,
           title: anime.title,
           imageUrl: anime.images.jpg.large_image_url,
           totalEpisodes: anime.episodes,
-          watchedEpisodes: safeWatched,
+          watchedEpisodes: initialWatched,
           genres: anime.genres.map(g => g.name),
-          updatedAt: now
-        };
+          score: anime.score || null,
+          synopsis: anime.synopsis || "",
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
-        const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
-        await watchlistRef.add(newEntry);
-
-        if (safeWatched > 0) {
-            const historyRef = db.collection('users').doc(user.uid).collection('history');
-            await historyRef.add({
+        if (initialWatched > 0) {
+            const historyRef = db.collection('users').doc(user.uid).collection('history').doc();
+            batch.set(historyRef, {
                 animeId: anime.mal_id,
                 animeTitle: anime.title,
-                episodesDelta: safeWatched,
-                timestamp: now
+                episodesDelta: initialWatched,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
+
+        await batch.commit();
     } catch (err: any) {
-        console.error("Write Error:", err);
-        setError(`WRITE FAILED: ${err.message}`);
+        setError(`WRITE_ERROR: ${err.message}`);
+        // Revert optimistic add
+        setWatchlist(prev => prev.filter(e => e.id !== tempId));
     }
   };
 
-  const updateEpisodes = async (entry: WatchListEntry, newAmount: number) => {
+  const performSyncUpdate = async (entry: WatchListEntry, finalAmount: number, delta: number) => {
     if (!user) return;
-    const delta = newAmount - entry.watchedEpisodes;
-    if (delta === 0) return;
-
+    setPendingOpsCount(prev => Math.max(0, prev - 1));
+    
     try {
-        const now = new Date().toISOString();
+        const batch = db.batch();
         const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(entry.id);
-        await entryRef.update({
-          watchedEpisodes: newAmount,
-          updatedAt: now
+        const historyRef = db.collection('users').doc(user.uid).collection('history').doc();
+
+        batch.update(entryRef, {
+          watchedEpisodes: finalAmount,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        const historyRef = db.collection('users').doc(user.uid).collection('history');
-        await historyRef.add({
+        batch.set(historyRef, {
           animeId: entry.animeId,
           animeTitle: entry.title,
           episodesDelta: delta,
-          timestamp: now
+          timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
+
+        await batch.commit();
     } catch (err: any) {
-        console.error("Update Error:", err);
-        setError(`UPDATE FAILED: ${err.message}`);
+        setError(`DEBOUNCED_SYNC_ERROR: ${err.message}`);
     }
   };
 
-  const updateHistoryEntry = async (id: string, updates: Partial<WatchHistoryItem>) => {
+  const updateEpisodesOptimistic = (entry: WatchListEntry, newAmount: number) => {
     if (!user) return;
-    try {
-      await db.collection('users').doc(user.uid).collection('history').doc(id).update(updates);
-    } catch (err: any) {
-      setError(`SYNC ERROR: ${err.message}`);
-    }
-  };
+    
+    // 1. Update Application State Immediately (Optimistic)
+    setWatchlist(prev => prev.map(e => e.id === entry.id ? { ...e, watchedEpisodes: newAmount, pending: true } : e));
 
-  const deleteHistoryEntry = async (id: string) => {
-    if (!user) return;
-    try {
-      await db.collection('users').doc(user.uid).collection('history').doc(id).delete();
-    } catch (err: any) {
-      setError(`DELETE ERROR: ${err.message}`);
-    }
-  };
-
-  const removeAnime = async (id: string) => {
-    if (!user) return;
-    if (window.confirm("WARNING: Confirm deletion of database entry.")) {
-      try {
-          const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(id);
-          await entryRef.delete();
-      } catch (err: any) {
-          setError(`PURGE ERROR: ${err.message}`);
-      }
+    // 2. Debounce Cloud Sync
+    if (syncQueue.current[entry.id]) {
+      clearTimeout(syncQueue.current[entry.id].timer);
+      const prevDelta = syncQueue.current[entry.id].delta;
+      const initialWatched = syncQueue.current[entry.id].initialWatched;
+      
+      syncQueue.current[entry.id] = {
+        initialWatched,
+        delta: newAmount - initialWatched,
+        timer: setTimeout(() => {
+          const { delta } = syncQueue.current[entry.id];
+          performSyncUpdate(entry, newAmount, delta);
+          delete syncQueue.current[entry.id];
+        }, 2000)
+      };
+    } else {
+      setPendingOpsCount(prev => prev + 1);
+      syncQueue.current[entry.id] = {
+        initialWatched: entry.watchedEpisodes,
+        delta: newAmount - entry.watchedEpisodes,
+        timer: setTimeout(() => {
+          const { delta } = syncQueue.current[entry.id];
+          performSyncUpdate(entry, newAmount, delta);
+          delete syncQueue.current[entry.id];
+        }, 2000)
+      };
     }
   };
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black text-[#00ff9f]">
+      <div className="min-h-screen flex items-center justify-center bg-black text-accent">
         <div className="flex flex-col items-center gap-4">
-            <Loader2 className="w-12 h-12 animate-spin" />
-            <div className="font-mono text-sm animate-pulse">ESTABLISHING CONNECTION...</div>
+            <Loader2 className="w-12 h-12 animate-spin text-accent" />
+            <div className="font-mono text-sm animate-pulse uppercase tracking-[0.2em] text-accent">Matrix_Link_Establishing...</div>
         </div>
       </div>
     );
   }
 
-  // --- LANDING / AUTH PAGE ---
   if (!user) {
-    if (!showAuth) {
-        return (
-          <>
-            <HomePage onStart={() => setShowAuth(true)} isDark={true} toggleTheme={() => {}} />
-            <AmbientSound />
-          </>
-        );
-    }
-
+    if (!showAuth) return <><HomePage onStart={() => setShowAuth(true)} isDark={true} toggleTheme={() => {}} /><AmbientSound /></>;
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-black text-white">
         <CyberBackground />
         <AmbientSound />
-        
-        <button 
-          onClick={() => setShowAuth(false)}
-          className="absolute top-6 left-6 z-50 text-gray-500 hover:text-[#00ff9f] flex items-center gap-2 font-mono text-xs transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>ABORT_SEQUENCE</span>
+        <button onClick={() => setShowAuth(false)} className="absolute top-6 left-6 z-50 text-gray-500 hover:text-accent flex items-center gap-2 font-mono text-xs transition-colors">
+          <ArrowLeft className="w-4 h-4" /> <span>ABORT_SEQUENCE</span>
         </button>
-
         <CyberCard className="w-full max-w-md animate-slide-up">
           <div className="p-8">
             <div className="text-center mb-10">
               <div className="flex justify-center mb-6 relative">
-                 <div className="absolute inset-0 bg-[#00ff9f]/20 blur-2xl rounded-full" />
-                 <Logo className="w-24 h-24 relative z-10 drop-shadow-[0_0_10px_rgba(0,255,159,0.6)] animate-pulse" />
+                 <div className="absolute inset-0 bg-accent/20 blur-2xl rounded-full" />
+                 <Logo className="w-24 h-24 relative z-10 drop-shadow-[0_0_10px_var(--accent-dim)] animate-pulse" />
               </div>
-              <h1 className="text-3xl font-black text-white tracking-tighter mb-1">
-                 <GlitchText>ACCESS_CONTROL</GlitchText>
-              </h1>
-              <p className="text-[#00ff9f] font-mono text-[10px] tracking-[0.2em] uppercase">
-                 Verify Identity to Proceed
-              </p>
+              <h1 className="text-3xl font-black text-white tracking-tighter mb-1"><GlitchText>ACCESS_CONTROL</GlitchText></h1>
+              <p className="text-accent font-mono text-[10px] tracking-[0.2em] uppercase">Verify Identity to Proceed</p>
             </div>
-
             <form onSubmit={handleAuth} className="space-y-6">
-              <CyberInput
-                label="User ID / Email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="runner@net.city"
-              />
-              <CyberInput
-                label="Access Key / Password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-              
-              {error && (
-                <div className="p-3 border border-[#ff0055] bg-[#ff0055]/10 text-[#ff0055] text-xs font-mono flex items-center gap-2">
-                   <Wifi className="w-4 h-4"/> ERROR: {error}
-                </div>
-              )}
-
+              <CyberInput label="User ID / Email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="runner@net.city" />
+              <CyberInput label="Access Key / Password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              {error && <div className="p-3 border border-cyber-pink bg-cyber-pink/10 text-cyber-pink text-xs font-mono flex items-center gap-2"><Wifi className="w-4 h-4"/> ERROR: {error}</div>}
               <CyberButton type="submit" primary className="w-full" disabled={formLoading}>
-                {formLoading ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>PROCESSING...</span>
-                  </div>
-                ) : (
-                  isSignUp ? 'Initialize_Account' : 'Jack_In'
-                )}
+                {formLoading ? <div className="flex items-center justify-center gap-2"><Loader2 className="w-5 h-5 animate-spin" /><span>PROCESSING...</span></div> : (isSignUp ? 'Initialize_Account' : 'Jack_In')}
               </CyberButton>
             </form>
-
-            <div className="mt-8 relative">
-               <div className="absolute inset-0 flex items-center">
-                 <div className="w-full border-t border-gray-800"></div>
-               </div>
-               <div className="relative flex justify-center text-xs">
-                 <span className="bg-black px-2 text-gray-600 font-mono">ALTERNATE_UPLINK</span>
-               </div>
-            </div>
-
-            <button 
-              type="button"
-              onClick={handleGoogleLogin}
-              disabled={formLoading}
-              className={`mt-6 w-full py-3 bg-white hover:bg-gray-100 text-black font-sans font-bold text-sm transition-all flex items-center justify-center gap-3 uppercase tracking-wider group shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_20px_rgba(255,255,255,0.3)] ${formLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
-              style={{ clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)' }}
-            >
+            <div className="mt-8 relative"><div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-800"></div></div><div className="relative flex justify-center text-xs"><span className="bg-black px-2 text-gray-600 font-mono">ALTERNATE_UPLINK</span></div></div>
+            <button type="button" onClick={handleGoogleLogin} disabled={formLoading} className="mt-6 w-full py-3 bg-white hover:bg-gray-100 text-black font-sans font-bold text-sm transition-all flex items-center justify-center gap-3 uppercase tracking-wider group shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:shadow-[0_0_20px_rgba(255,255,255,0.3)]">
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
@@ -375,178 +409,114 @@ const App: React.FC = () => {
               </svg>
               <span>Sign In with Google</span>
             </button>
-
             <div className="mt-8 text-center">
-              <button
-                onClick={() => setIsSignUp(!isSignUp)}
-                className="text-xs text-[#00ff9f] hover:text-white font-mono hover:underline decoration-[#00ff9f] underline-offset-4"
-              >
+              <button onClick={() => setIsSignUp(!isSignUp)} className="text-xs text-accent hover:text-white font-mono hover:underline decoration-accent underline-offset-4">
                 {isSignUp ? "HAS_ACCOUNT? EXECUTE LOGIN" : "NO_DATA? CREATE NEW RECORD"}
               </button>
             </div>
-            
           </div>
         </CyberCard>
       </div>
     );
   }
 
-  // --- MAIN DASHBOARD ---
-  // Updated to pass watchlist for calculating lifetime stats
   const stats = calculateStats(history, watchlist);
 
   return (
-    <div className="min-h-screen relative pb-20 font-sans selection:bg-[#ff0055] selection:text-white bg-black">
+    <div className="min-h-screen relative pb-20 font-sans selection:bg-cyber-pink selection:text-white bg-[var(--bg-color)] text-[var(--text-color)] transition-colors duration-500">
       <CyberBackground />
       <AmbientSound />
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10">
+      <header className="sticky top-0 z-40 bg-[var(--bg-color)]/80 backdrop-blur-md border-b border-[var(--border-color)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3 group">
-            <Logo className="w-10 h-10 hover:scale-110 transition-transform duration-300 drop-shadow-[0_0_8px_rgba(0,255,159,0.3)]" />
-            <span className="font-mono font-bold text-xl tracking-tighter text-white group-hover:text-[#00ff9f] transition-colors">
-                ANI<span className="text-[#00ff9f]">TRACK</span>
-            </span>
+            <Logo className="w-10 h-10 hover:scale-110 transition-transform duration-300" />
+            <span className="font-mono font-bold text-xl tracking-tighter text-[var(--text-color)] group-hover:text-accent transition-colors">ANI<span className="text-accent">TRACK</span></span>
             
-            {/* Sync Status Indicator */}
-            <div className="ml-4 flex items-center gap-2 border-l border-gray-700 pl-4 h-8">
-               {hasPendingWrites ? (
-                 <div className="flex items-center gap-2 text-yellow-500 animate-pulse" title="Syncing to Cloud...">
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span className="text-[10px] font-mono font-bold hidden sm:inline">SYNCING</span>
+            <button onClick={syncData} className="ml-4 flex items-center gap-2 border-l border-gray-800 pl-4 h-8 group/sync">
+               {hasPendingWrites || isSyncing || pendingOpsCount > 0 ? (
+                 <div className="flex items-center gap-2 text-amber-500 animate-pulse">
+                    <CloudUpload className="w-3.5 h-3.5 animate-bounce" />
+                    <span className="text-[10px] font-mono font-bold hidden md:inline">
+                      {pendingOpsCount > 0 ? `${pendingOpsCount} PENDING_OPS` : 'UPLINKING...'}
+                    </span>
                  </div>
                ) : (
-                 <div className="flex items-center gap-2 text-[#00ff9f]" title="Cloud Synced">
-                    <Cloud className="w-4 h-4" />
-                    <span className="text-[10px] font-mono font-bold hidden sm:inline">ONLINE</span>
+                 <div className="flex items-center gap-2 text-accent">
+                    <Cloud className="w-4 h-4 group-hover/sync:scale-110 transition-transform" />
+                    <span className="text-[10px] font-mono font-bold hidden md:inline">SYNCHRONIZED</span>
                  </div>
                )}
-            </div>
+            </button>
           </div>
           
           <div className="flex items-center gap-6">
-            <div className="hidden md:flex flex-col items-end cursor-default font-mono">
-                <span className="text-xs font-bold text-[#00ff9f] leading-none mb-1">
-                    RUNNER: {user.displayName || 'ANON'}
+            <div className="hidden lg:flex flex-col items-end cursor-default font-mono border-r border-gray-800 pr-6 mr-2">
+                <span className="text-xs font-bold text-accent leading-none mb-1 flex items-center gap-2">
+                   <UserCheck className="w-3 h-3 text-accent" /> {user.displayName || 'ANON_RUNNER'}
                 </span>
-                <span className="text-[10px] text-gray-500 uppercase tracking-widest flex items-center gap-1">
-                    {user.email || `ID: ${user.uid.substring(0,6)}`}
-                </span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-widest">{lastSyncTime ? `SYNC_OK: ${lastSyncTime.toLocaleTimeString()}` : 'INITIALIZING...'}</span>
             </div>
-            
             <div className="flex items-center gap-4">
-                <button
-                    onClick={() => setShowProfile(true)}
-                    className="w-10 h-10 border border-gray-700 hover:border-[#ff0055] hover:shadow-[0_0_10px_#ff0055] transition-all flex items-center justify-center overflow-hidden bg-black"
-                    title="Identity Module"
-                >
-                     {user.photoURL ? (
-                        <img src={user.photoURL} alt="User" className="w-full h-full object-cover opacity-80 hover:opacity-100" />
-                     ) : (
-                        <Ghost className="w-5 h-5 text-gray-500" />
-                     )}
+                <button onClick={() => setShowProfile(true)} className="w-10 h-10 border border-gray-700 hover:border-accent transition-all flex items-center justify-center overflow-hidden bg-black relative">
+                     {user.photoURL ? <img src={user.photoURL} alt="User" className="w-full h-full object-cover opacity-80" /> : <Ghost className="w-5 h-5 text-gray-500" />}
+                     <div className="absolute top-0 right-0 w-2 h-2 bg-accent border border-black rounded-full" />
                 </button>
-
-                <div className="h-6 w-px bg-gray-800 mx-1"></div>
-                
-                <button
-                  onClick={handleLogout}
-                  className="p-2 text-gray-600 hover:text-red-500 transition-colors"
-                  title="Sever Connection"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
+                <button onClick={handleLogout} className="p-2 text-gray-600 hover:text-red-500 transition-colors"><LogOut className="w-5 h-5" /></button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 relative z-10">
-        
-        {/* GLOBAL ALERT BANNER */}
         {(error || isOffline) && (
-          <div className={`mb-8 p-4 border flex items-center justify-between gap-4 animate-fade-in ${isOffline ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-[#ff0055]/10 border-[#ff0055] text-[#ff0055]'}`}>
+          <div className={`mb-8 p-4 border flex items-center justify-between gap-4 animate-fade-in ${isOffline ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-cyber-pink/10 border-cyber-pink text-cyber-pink'}`}>
             <div className="flex items-center gap-3">
                {isOffline ? <CloudOff className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-               <div>
-                  <h3 className="font-bold font-mono tracking-wider">{isOffline ? 'OFFLINE MODE' : 'SYSTEM CRITICAL ERROR'}</h3>
-                  <p className="text-xs font-mono opacity-80">
-                     {isOffline ? 'CONNECTION LOST. DATA WILL SYNC AUTOMATICALLY WHEN ONLINE.' : error}
-                  </p>
-               </div>
+               <div><h3 className="font-bold font-mono tracking-wider">{isOffline ? 'OFFLINE_MODE' : 'SYNC_PROTOCOL_ERROR'}</h3><p className="text-xs font-mono opacity-80">{isOffline ? 'LOCAL_CACHE_ONLY. RECONNECT TO UPLOAD.' : error}</p></div>
             </div>
-            {error && !isOffline && (
-                <button onClick={() => setError('')} className="p-2 hover:bg-white/10 rounded transition-colors">
-                    <X className="w-5 h-5" />
-                </button>
-            )}
+            <button onClick={() => setError('')} className="p-2 hover:bg-white/10 rounded"><X className="w-5 h-5" /></button>
           </div>
         )}
 
-        {/* Stats Section */}
         <section className="mb-16 animate-fade-in">
-          <div className="flex items-end justify-between mb-8 border-b border-white/10 pb-4">
-             <div>
-                <h2 className="text-2xl font-black text-white uppercase tracking-tight mb-1">Data Overview</h2>
-                <div className="text-[10px] font-mono text-gray-500">REAL-TIME ANALYTICS</div>
-             </div>
-             <button
-               onClick={() => setShowHistory(true)}
-               className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 hover:border-[#00ff9f] hover:text-[#00ff9f] text-gray-400 text-xs font-mono transition-all uppercase tracking-wider"
-             >
-               <History className="w-3 h-3" />
-               View Logs
+          <div className="flex items-end justify-between mb-8 border-b border-[var(--border-color)] pb-4">
+             <div><h2 className="text-2xl font-black text-[var(--text-color)] uppercase tracking-tight mb-1">Data Overview</h2><div className="text-[10px] font-mono text-gray-500">NEURAL_DASHBOARD</div></div>
+             <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-[var(--border-color)] hover:border-accent text-gray-400 text-xs font-mono transition-all uppercase tracking-wider">
+               <History className="w-3 h-3" /> View Logs
              </button>
           </div>
           <StatsBoard stats={stats} />
         </section>
 
-        {/* Search Section */}
         <section className="mb-20 flex flex-col items-center">
           <div className="w-full max-w-2xl text-center mb-8">
-             <h2 className="text-xl font-bold text-white uppercase tracking-widest mb-2"><GlitchText>Database Entry</GlitchText></h2>
-             <div className="h-0.5 w-24 bg-[#ff0055] mx-auto" />
+             <h2 className="text-xl font-bold text-[var(--text-color)] uppercase tracking-widest mb-2"><GlitchText>Database Entry</GlitchText></h2>
+             <div className="h-0.5 w-24 bg-accent mx-auto" />
           </div>
           <AnimeSearch onAddAnime={addAnimeToLibrary} watchlist={watchlist} />
         </section>
 
-        {/* Library Section */}
         <section>
-          <div className="flex flex-col sm:flex-row items-end justify-between mb-8 gap-4 border-b border-white/10 pb-4">
-            <div>
-                <h2 className="text-3xl font-black text-white flex items-center gap-3">
-                MEMORY BANK <span className="text-lg font-mono font-normal text-[#00ff9f] border border-[#00ff9f] px-2 py-0.5 rounded-none">{watchlist.length}</span>
-                </h2>
+          <div className="flex flex-col sm:flex-row items-end justify-between mb-8 gap-4 border-b border-[var(--border-color)] pb-4">
+            <div className="flex items-center gap-4">
+                <h2 className="text-3xl font-black text-[var(--text-color)] flex items-center gap-3 uppercase">MEMORY BANK <span className="text-lg font-mono font-normal text-accent border border-accent px-2 py-0.5">{watchlist.length}</span></h2>
+                <button onClick={syncData} disabled={isSyncing} className={`p-2 border border-gray-800 text-gray-600 hover:text-accent hover:border-accent transition-all rounded-full ${isSyncing ? 'animate-spin' : ''}`}><RefreshCw className="w-4 h-4" /></button>
             </div>
-            
-            {/* Sort Controls */}
-            {watchlist.length > 0 && (
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] font-mono text-gray-500 uppercase">Sort Protocol:</span>
-                <div className="flex gap-1">
-                  <button
-                    onClick={() => setSortType('updated')}
-                    className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider transition-all border ${sortType === 'updated' ? 'bg-[#00ff9f]/20 border-[#00ff9f] text-[#00ff9f]' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}
-                  >
-                    Recent
-                  </button>
-                  <button
-                    onClick={() => setSortType('title')}
-                    className={`px-3 py-1 text-[10px] font-mono uppercase tracking-wider transition-all border ${sortType === 'title' ? 'bg-[#00ff9f]/20 border-[#00ff9f] text-[#00ff9f]' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}
-                  >
-                    Alpha
-                  </button>
-                </div>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-mono text-gray-500 uppercase">Sort:</span>
+              <div className="flex gap-1">
+                <button onClick={() => setSortType('updated')} className={`px-3 py-1 text-[10px] font-mono border ${sortType === 'updated' ? 'bg-accent/20 border-accent text-accent' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}>Recent</button>
+                <button onClick={() => setSortType('title')} className={`px-3 py-1 text-[10px] font-mono border ${sortType === 'title' ? 'bg-accent/20 border-accent text-accent' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}>Alpha</button>
               </div>
-            )}
+            </div>
           </div>
 
           {watchlist.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 border border-dashed border-gray-800 bg-white/5">
               <Ghost className="w-16 h-16 text-gray-800 mb-4" />
-              <p className="font-mono text-gray-500 text-lg">MEMORY EMPTY</p>
-              <p className="font-mono text-gray-700 text-xs mt-2">INITIATE SEARCH PROTOCOL TO POPULATE</p>
+              <p className="font-mono text-gray-500 text-lg uppercase">Memory Void</p>
+              <p className="font-mono text-gray-700 text-[10px] mt-2 tracking-widest uppercase">Search to populate</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
@@ -554,8 +524,12 @@ const App: React.FC = () => {
                 <AnimeCard 
                   key={entry.id} 
                   entry={entry} 
-                  onUpdateEpisodes={updateEpisodes}
-                  onRemove={removeAnime}
+                  onUpdateEpisodes={updateEpisodesOptimistic} 
+                  onRemove={(id) => {
+                    if (window.confirm("WARNING: Purge record?")) {
+                      db.collection('users').doc(user.uid).collection('watchlist').doc(id).delete();
+                    }
+                  }} 
                 />
               ))}
             </div>
@@ -563,26 +537,12 @@ const App: React.FC = () => {
         </section>
       </main>
 
-      {/* User Profile Modal */}
-      {showProfile && user && (
-        <UserProfile 
-            user={user} 
-            stats={stats} 
-            animeCount={watchlist.length}
-            onClose={() => setShowProfile(false)} 
-        />
-      )}
-
-      {/* History Modal */}
-      {showHistory && (
-        <HistoryModal
-          history={history}
-          watchlist={watchlist}
-          onClose={() => setShowHistory(false)}
-          onUpdate={updateHistoryEntry}
-          onDelete={deleteHistoryEntry}
-        />
-      )}
+      {showProfile && user && <UserProfile user={user} stats={stats} animeCount={watchlist.length} themeSettings={themeSettings} onClose={() => setShowProfile(false)} />}
+      {showHistory && <HistoryModal history={history} watchlist={watchlist} onClose={() => setShowHistory(false)} onUpdate={async (id, data) => {
+        await db.collection('users').doc(user.uid).collection('history').doc(id).update(data);
+      }} onDelete={async (id) => {
+        await db.collection('users').doc(user.uid).collection('history').doc(id).delete();
+      }} />}
     </div>
   );
 };

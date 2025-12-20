@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion } from 'framer-motion';
 
@@ -5,28 +6,28 @@ import { motion } from 'framer-motion';
 
 export const CyberBackground: React.FC = () => {
   const bgGrid = `
-    radial-gradient(circle, #00ff9f 1px, transparent 1px),
+    radial-gradient(circle, var(--accent-color) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 20%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.9) 100%)
   `;
 
   return (
     <>
-      <div className="fixed inset-0 pointer-events-none z-0 bg-black" />
+      <div className="fixed inset-0 pointer-events-none z-0 bg-[var(--bg-color)] transition-colors duration-500" />
       
       {/* Scanlines */}
       <div className="fixed inset-0 pointer-events-none z-[1]"
         style={{
-          background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2))',
+          background: 'linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1))',
           backgroundSize: '100% 4px'
         }}
       />
       
       {/* Vignette */}
-      <div className="fixed inset-0 pointer-events-none z-[1] bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.6)_100%)]" />
+      <div className="fixed inset-0 pointer-events-none z-[1] bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)]" />
 
       {/* Grid */}
       <div 
-        className="fixed inset-0 z-0 opacity-20 pointer-events-none"
+        className="fixed inset-0 z-0 opacity-10 pointer-events-none transition-opacity duration-500"
         style={{
           backgroundImage: bgGrid,
           backgroundSize: '40px 40px, 100% 100%'
@@ -45,7 +46,7 @@ export const GlitchText: React.FC<{ children: React.ReactNode; text?: string; cl
     <div className={`relative inline-block group ${className}`}>
       <span className="relative z-10">{children}</span>
       <motion.span 
-        className="absolute top-0 left-0 -z-10 w-full h-full text-[#ff0055] opacity-0 group-hover:opacity-100 select-none pointer-events-none mix-blend-screen"
+        className="absolute top-0 left-0 -z-10 w-full h-full text-cyber-pink opacity-0 group-hover:opacity-100 select-none pointer-events-none mix-blend-screen"
         initial={{ x: 0, y: 0 }}
         whileHover={{
           x: [-2, 2, -1, 3, 0],
@@ -57,7 +58,7 @@ export const GlitchText: React.FC<{ children: React.ReactNode; text?: string; cl
         {content}
       </motion.span>
       <motion.span 
-        className="absolute top-0 left-0 -z-10 w-full h-full text-[#00ff9f] opacity-0 group-hover:opacity-100 select-none pointer-events-none mix-blend-screen"
+        className="absolute top-0 left-0 -z-10 w-full h-full text-accent opacity-0 group-hover:opacity-100 select-none pointer-events-none mix-blend-screen"
         initial={{ x: 0, y: 0 }}
         whileHover={{
           x: [2, -2, 1, -3, 0],
@@ -103,14 +104,14 @@ export const CyberButton: React.FC<{
     >
       <div className={`absolute inset-0 border-2 transition-all duration-300 ${
         primary 
-          ? 'bg-[#00ff9f]/10 border-[#00ff9f] group-hover:bg-[#00ff9f] group-hover:shadow-[0_0_30px_#00ff9f]' 
-          : 'bg-transparent border-[#ff0055] group-hover:bg-[#ff0055]/20 group-hover:shadow-[0_0_30px_#ff0055]'
+          ? 'bg-accent/10 border-accent group-hover:bg-accent group-hover:shadow-[0_0_30px_var(--accent-color)]' 
+          : 'bg-transparent border-[var(--text-color)] opacity-30 group-hover:opacity-100 group-hover:bg-[var(--text-color)] group-hover:border-[var(--text-color)]'
       }`} />
       
       <span className={`relative z-10 flex items-center justify-center gap-2 ${
         primary 
-          ? 'text-[#00ff9f] group-hover:text-black' 
-          : 'text-[#ff0055] group-hover:text-white'
+          ? 'text-accent group-hover:text-black' 
+          : 'text-[var(--text-color)] group-hover:invert transition-all'
       }`}>
         {children}
       </span>
@@ -121,19 +122,19 @@ export const CyberButton: React.FC<{
 export const CyberInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label: string }> = ({ label, className, ...props }) => {
   return (
     <div className="relative group">
-      <label className="block text-xs font-mono text-[#00ff9f] mb-1 uppercase tracking-wider opacity-80 group-focus-within:opacity-100 group-focus-within:text-shadow-[0_0_5px_#00ff9f]">
+      <label className="block text-xs font-mono text-accent mb-1 uppercase tracking-wider opacity-80 group-focus-within:opacity-100 group-focus-within:text-shadow-accent">
         {label}
       </label>
       <div className="relative">
         <input
           {...props}
-          className={`w-full bg-black/50 border border-gray-700 text-white px-4 py-3 font-mono text-sm focus:outline-none focus:border-[#00ff9f] focus:bg-[#00ff9f]/5 transition-all duration-300 ${className}`}
+          className={`w-full bg-[var(--input-bg)] border border-gray-700/50 text-[var(--text-color)] px-4 py-3 font-mono text-sm focus:outline-none focus:border-accent focus:bg-accent/5 transition-all duration-300 ${className}`}
           style={{
             clipPath: 'polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px)'
           }}
         />
         {/* Corner Accent */}
-        <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-[#00ff9f] opacity-50 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
+        <div className="absolute bottom-0 right-0 w-3 h-3 border-b border-r border-accent opacity-50 group-focus-within:opacity-100 transition-opacity pointer-events-none" />
       </div>
     </div>
   );
@@ -144,17 +145,17 @@ export const CyberInput: React.FC<React.InputHTMLAttributes<HTMLInputElement> & 
 export const CyberCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => {
   return (
     <div 
-      className={`relative bg-black/80 backdrop-blur-md border border-white/10 p-1 ${className}`}
+      className={`relative bg-[var(--card-bg)] backdrop-blur-md border border-[var(--border-color)] p-1 transition-colors duration-500 ${className}`}
       style={{
         clipPath: 'polygon(20px 0, 100% 0, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0 100%, 0 20px)'
       }}
     >
-      <div className="absolute top-0 left-0 w-full h-full border border-[#00ff9f]/20 pointer-events-none" 
+      <div className="absolute top-0 left-0 w-full h-full border border-accent/20 pointer-events-none" 
          style={{ clipPath: 'inherit' }} 
       />
       {/* Decorative bits */}
-      <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-[#00ff9f]/50" />
-      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-[#00ff9f]/50" />
+      <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-accent/50" />
+      <div className="absolute bottom-0 right-0 w-8 h-8 border-b-2 border-r-2 border-accent/50" />
       
       <div className="relative z-10">
         {children}

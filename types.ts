@@ -1,3 +1,4 @@
+
 export interface Anime {
   mal_id: number;
   title: string;
@@ -13,6 +14,12 @@ export interface Anime {
   synopsis?: string;
 }
 
+export interface ThemeSettings {
+  mode: 'dark' | 'light';
+  accentColor: string;
+  accentName: string;
+}
+
 export interface WatchListEntry {
   id: string; // Firestore ID
   animeId: number;
@@ -23,6 +30,8 @@ export interface WatchListEntry {
   genres: string[];
   updatedAt: string; // ISO String
   pending?: boolean; // True if data has not yet synced to the cloud
+  score?: number;
+  synopsis?: string;
 }
 
 export interface WatchHistoryItem {

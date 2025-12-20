@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
@@ -8,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             colors: {
@@ -18,7 +20,9 @@
                 blue: '#00baee',
                 purple: '#bc13fe',
                 gray: '#1a1a1a',
-              }
+              },
+              accent: 'var(--accent-color)',
+              'accent-dim': 'var(--accent-dim)',
             },
             fontFamily: {
               mono: ['"Courier New"', 'Courier', 'monospace'],
@@ -29,8 +33,7 @@
               'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
               'spin-slow': 'spin 8s linear infinite',
               'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'neon-pulse-green': 'pulseGlowGreen 3s infinite',
-              'neon-pulse-pink': 'pulseGlowPink 3s infinite',
+              'neon-pulse': 'pulseGlow 3s infinite',
             },
             keyframes: {
               fadeIn: {
@@ -41,13 +44,9 @@
                 '0%': { transform: 'translateY(20px)', opacity: '0' },
                 '100%': { transform: 'translateY(0)', opacity: '1' },
               },
-              pulseGlowGreen: {
-                '0%, 100%': { filter: 'drop-shadow(0 0 2px #00ff9f80)' },
-                '50%': { filter: 'drop-shadow(0 0 8px #00ff9f) drop-shadow(0 0 15px #00ff9f40)' },
-              },
-              pulseGlowPink: {
-                '0%, 100%': { filter: 'drop-shadow(0 0 2px #ff005580)' },
-                '50%': { filter: 'drop-shadow(0 0 8px #ff0055) drop-shadow(0 0 15px #ff005540)' },
+              pulseGlow: {
+                '0%, 100%': { filter: 'drop-shadow(0 0 2px var(--accent-dim))' },
+                '50%': { filter: 'drop-shadow(0 0 8px var(--accent-color)) drop-shadow(0 0 15px var(--accent-dim))' },
               }
             }
           },
@@ -56,29 +55,65 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      :root {
+        --accent-color: #00ff9f;
+        --accent-dim: rgba(0, 255, 159, 0.4);
+        --bg-color: #000000;
+        --card-bg: rgba(5, 5, 5, 0.8);
+        --text-color: #e5e5e5;
+        --border-color: rgba(255, 255, 255, 0.1);
+        --input-bg: rgba(0, 0, 0, 0.5);
+      }
+
       body {
         font-family: 'Quicksand', sans-serif;
-        background-color: #000;
-        color: #e5e5e5;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
       }
-      /* Custom Scrollbar for Cyberpunk Look */
+
+      .dark {
+        --bg-color: #000000;
+        --card-bg: rgba(8, 8, 8, 0.9);
+        --text-color: #e5e5e5;
+        --border-color: rgba(255, 255, 255, 0.1);
+        --input-bg: rgba(0, 0, 0, 0.5);
+      }
+
+      .light {
+        --bg-color: #f5f7f9;
+        --card-bg: rgba(255, 255, 255, 0.95);
+        --text-color: #1a1a1a;
+        --border-color: rgba(0, 0, 0, 0.08);
+        --input-bg: rgba(255, 255, 255, 0.8);
+      }
+
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: #050505; 
+        background: transparent; 
       }
       ::-webkit-scrollbar-thumb {
         background: #333; 
         border-radius: 0;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #00ff9f; 
+        background: var(--accent-color); 
       }
       
       .clip-corner {
         clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+      }
+
+      .text-shadow-accent {
+        text-shadow: 0 0 10px var(--accent-dim);
+      }
+      
+      .theme-transition {
+        transition: all 0.3s ease;
       }
     </style>
 <script type="importmap">
@@ -97,7 +132,7 @@
 }
 </script>
 </head>
-  <body class="bg-black text-white antialiased">
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
