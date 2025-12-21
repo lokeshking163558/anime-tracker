@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, UploadCloud } from 'lucide-react';
+import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, UploadCloud, BookOpen, BookOpenCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WatchListEntry } from '../types';
 import { GENRE_COLORS } from '../constants';
@@ -8,12 +8,14 @@ import { GENRE_COLORS } from '../constants';
 interface AnimeCardProps {
   entry: WatchListEntry;
   onUpdateEpisodes: (entry: WatchListEntry, newAmount: number) => void;
+  onToggleFavorite: (id: string, current: boolean) => void;
   onRemove: (id: string) => void;
 }
 
-export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, onRemove }) => {
+export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, onToggleFavorite, onRemove }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isFullSynopsis, setIsFullSynopsis] = useState(false);
   
   // Local optimistic state for instant feedback
   const [optimisticWatched, setOptimisticWatched] = useState(entry.watchedEpisodes);
@@ -26,6 +28,13 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     return () => clearTimeout(timer);
   }, [entry.watchedEpisodes]);
 
+  // Reset synopsis state when card collapses
+  useEffect(() => {
+    if (!isExpanded) {
+      setIsFullSynopsis(false);
+    }
+  }, [isExpanded]);
+
   const handleUpdate = (e: React.MouseEvent, delta: number) => {
     e.stopPropagation();
     const newAmount = optimisticWatched + delta;
@@ -36,14 +45,26 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     onUpdateEpisodes(entry, newAmount);
   };
 
+  const handleToggleFav = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite(entry.id, !!entry.isFavorite);
+  };
+
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
     onRemove(entry.id);
   };
 
+  const toggleSynopsis = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsFullSynopsis(!isFullSynopsis);
+  };
+
   const progress = entry.totalEpisodes !== null 
     ? (optimisticWatched / entry.totalEpisodes) * 100 
     : 0;
+
+  const hasLongSynopsis = entry.synopsis && entry.synopsis.length > 180;
 
   return (
     <div 
@@ -68,15 +89,34 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
             <div className={`h-[2px] mt-2 transition-all duration-500 ${entry.pending ? 'w-1/2 bg-amber-500 animate-pulse' : isExpanded ? 'w-full bg-accent' : 'w-10 bg-accent group-hover:w-full'}`} />
         </div>
 
-        {entry.score && (
-          <div className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-black/70 border border-accent/40 backdrop-blur-sm">
-             <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-             <span className="text-[10px] font-mono font-bold text-accent">{entry.score}</span>
+        {/* Top Controls Overlay */}
+        <div className="absolute top-2 left-2 right-2 flex justify-between items-start z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex gap-1">
+             {entry.score && (
+                <div className="flex items-center gap-1 px-2 py-0.5 bg-black/70 border border-accent/40 backdrop-blur-sm">
+                   <Star className="w-3 h-3 text-yellow-400 fill-yellow-400" />
+                   <span className="text-[10px] font-mono font-bold text-accent">{entry.score}</span>
+                </div>
+             )}
           </div>
+          <div className="flex gap-1">
+             <button 
+                onClick={handleToggleFav}
+                className={`p-1.5 backdrop-blur-sm transition-all rounded-sm ${entry.isFavorite ? 'bg-yellow-400/20 text-yellow-400 border border-yellow-400/50' : 'bg-black/60 text-gray-500 hover:text-yellow-400 hover:bg-black'}`}
+             >
+                <Star className={`w-4 h-4 ${entry.isFavorite ? 'fill-yellow-400' : ''}`} />
+             </button>
+             <button onClick={handleRemove} className="p-1.5 bg-black/60 text-gray-500 hover:text-red-500 hover:bg-black transition-all backdrop-blur-sm rounded-sm"><Trash2 className="w-4 h-4" /></button>
+          </div>
+        </div>
+        
+        {/* Permanent Favorite Indicator if not hovered */}
+        {entry.isFavorite && (
+           <div className="absolute top-2 left-2 p-1.5 bg-yellow-400 text-black group-hover:opacity-0 transition-opacity z-[5]">
+              <Star className="w-3 h-3 fill-black" />
+           </div>
         )}
 
-        <button onClick={handleRemove} className="absolute top-0 right-0 p-2 bg-black/60 text-gray-500 hover:text-red-500 hover:bg-black transition-colors backdrop-blur-sm z-10"><Trash2 className="w-4 h-4" /></button>
-        
         {entry.pending && (
           <div className="absolute top-2 right-12 p-1.5 bg-amber-500/20 text-amber-500 backdrop-blur-sm flex items-center gap-1 font-mono text-[9px] border border-amber-500/50 z-10">
              <UploadCloud className="w-2.5 h-2.5 animate-bounce" />
@@ -138,21 +178,61 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
           </div>
         </div>
 
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {isExpanded && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mt-6 border-t border-white/10 pt-4">
+            <motion.div 
+              key="expanded-details"
+              initial={{ height: 0, opacity: 0 }} 
+              animate={{ height: 'auto', opacity: 1 }} 
+              exit={{ height: 0, opacity: 0 }} 
+              className="overflow-hidden mt-6 border-t border-white/10 pt-4"
+            >
                <div className="flex items-center gap-2 mb-2 text-accent">
                  <Database className="w-3.5 h-3.5" />
                  <span className="text-[10px] font-mono font-bold tracking-widest uppercase">Memory_Extract</span>
                </div>
-               {entry.synopsis ? <p className="text-[11px] font-sans leading-relaxed text-gray-400 line-clamp-6 italic">{entry.synopsis}</p> : <p className="text-[10px] font-mono text-gray-600 uppercase italic">No synopsis linked.</p>}
-               <div className="mt-4 flex justify-center">
-                 <button className="text-[9px] font-mono text-gray-600 hover:text-accent transition-colors uppercase tracking-widest flex items-center gap-1">Click to Retract <ChevronUp className="w-3 h-3" /></button>
+               
+               {entry.synopsis ? (
+                 <div className="space-y-3">
+                    <p className={`text-[11px] font-sans leading-relaxed text-gray-400 italic transition-all duration-300 ${isFullSynopsis ? '' : 'line-clamp-3'}`}>
+                      {entry.synopsis}
+                    </p>
+                    
+                    {hasLongSynopsis && (
+                      <button 
+                        onClick={toggleSynopsis}
+                        className="flex items-center gap-1.5 text-[9px] font-mono text-accent hover:text-white transition-colors uppercase tracking-widest border border-accent/20 px-2 py-1 bg-accent/5 hover:bg-accent/20"
+                      >
+                        {isFullSynopsis ? (
+                          <><BookOpenCheck className="w-3 h-3" /> TRUNCATE_LOG</>
+                        ) : (
+                          <><BookOpen className="w-3 h-3" /> READ_FULL_LOG</>
+                        )}
+                      </button>
+                    )}
+                 </div>
+               ) : (
+                 <p className="text-[10px] font-mono text-gray-600 uppercase italic">No synopsis linked.</p>
+               )}
+
+               <div className="mt-6 flex justify-center">
+                 <button className="text-[9px] font-mono text-gray-600 hover:text-accent transition-colors uppercase tracking-widest flex items-center gap-1 group/retract">
+                   Click to Retract 
+                   <ChevronUp className="w-3 h-3 group-hover/retract:-translate-y-0.5 transition-transform" />
+                 </button>
                </div>
             </motion.div>
           )}
         </AnimatePresence>
-        {!isExpanded && <div className="mt-2 flex justify-center opacity-0 group-hover:opacity-40 transition-opacity"><ChevronDown className="w-4 h-4 text-gray-500" /></div>}
+        {!isExpanded && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.4 }}
+            className="mt-2 flex justify-center group-hover:opacity-100 transition-opacity"
+          >
+            <ChevronDown className="w-4 h-4 text-gray-500 group-hover:text-accent animate-bounce" />
+          </motion.div>
+        )}
       </div>
       <style>{`
         @keyframes shimmer {

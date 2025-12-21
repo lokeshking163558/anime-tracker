@@ -13,7 +13,7 @@ import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
 import { AmbientSound } from './components/AmbientSound';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, UploadCloud } from 'lucide-react';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, UploadCloud, ShieldCheck, Star } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -21,6 +21,7 @@ const App: React.FC = () => {
   const [watchlist, setWatchlist] = useState<WatchListEntry[]>([]);
   const [history, setHistory] = useState<WatchHistoryItem[]>([]);
   const [sortType, setSortType] = useState<'updated' | 'title'>('updated');
+  const [filterFavorites, setFilterFavorites] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -38,8 +39,9 @@ const App: React.FC = () => {
   const [error, setError] = useState('');
   const [formLoading, setFormLoading] = useState(false);
 
-  // Debounce and Sync Refs
-  const syncQueue = useRef<Record<string, { timer: ReturnType<typeof setTimeout>, delta: number, initialWatched: number }>>({});
+  // Refs for debouncing and state locking
+  const syncQueue = useRef<Record<string, { timer: ReturnType<typeof setTimeout>, initialWatched: number }>>({});
+  const isPerformingManualSync = useRef(false);
 
   // Apply theme to document
   useEffect(() => {
@@ -115,20 +117,33 @@ const App: React.FC = () => {
     return val;
   };
 
+  /**
+   * Deep Sync: 
+   * Forces a refresh of the local cache from the Cloud.
+   * Optimized with a timeout to prevent hanging on zombie connections.
+   */
   const syncData = async () => {
-    if (!user) return;
+    if (!user || isPerformingManualSync.current) return;
+    isPerformingManualSync.current = true;
     setIsSyncing(true);
     setError('');
 
     try {
+      if (!isOffline) {
+        // Timeout after 5s if writes are blocked
+        const waitPromise = db.waitForPendingWrites();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 5000));
+        await Promise.race([waitPromise, timeoutPromise]).catch(() => {
+          console.warn("Deep Sync: Pending writes taking too long, proceeding anyway.");
+        });
+      }
+
       const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
       const historyRef = db.collection('users').doc(user.uid).collection('history');
       
-      // Removed { source: 'server' } to allow Firestore to handle transport gracefully.
-      // It will still attempt to reach the server but won't crash if it uses local cache.
       const [wSnap, hSnap] = await Promise.all([
-        watchlistRef.get(),
-        historyRef.get()
+        watchlistRef.get({ source: isOffline ? 'cache' : 'server' }),
+        historyRef.get({ source: isOffline ? 'cache' : 'server' })
       ]);
       
       const wList = wSnap.docs.map(doc => ({ 
@@ -147,11 +162,11 @@ const App: React.FC = () => {
       setHistory(hList);
       setLastSyncTime(new Date());
     } catch (err: any) {
-      console.error("Sync error:", err);
-      // Soft error message
-      setError("UPLINK_DELAY: Operation continuing with local buffer.");
+      console.error("Deep Sync failed:", err);
+      setError("UPLINK_STALL: Server verify failed. Re-linking to cache.");
     } finally {
       setIsSyncing(false);
+      isPerformingManualSync.current = false;
     }
   };
 
@@ -164,6 +179,8 @@ const App: React.FC = () => {
 
     const userRef = db.collection('users').doc(user.uid);
     
+    // onSnapshot is naturally optimistic. When persistence is enabled,
+    // it updates the local state as soon as a write is initiated.
     const unsubWatchlist = userRef.collection('watchlist').onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
       const list = snapshot.docs.map(doc => {
         const data = doc.data();
@@ -177,7 +194,8 @@ const App: React.FC = () => {
       
       setWatchlist(list);
       setHasPendingWrites(snapshot.metadata.hasPendingWrites);
-      if (!snapshot.metadata.hasPendingWrites) {
+      
+      if (!snapshot.metadata.hasPendingWrites && !isPerformingManualSync.current) {
         setLastSyncTime(new Date());
       }
     });
@@ -194,25 +212,23 @@ const App: React.FC = () => {
       setHistory(hist);
     });
 
-    const unsubSync = db.onSnapshotsInSync(() => {
-      setHasPendingWrites(false);
-    });
-
     return () => {
       unsubWatchlist();
       unsubHistory();
-      unsubSync();
     };
   }, [user]);
 
   const sortedWatchlist = useMemo(() => {
-    const data = [...watchlist];
+    let data = [...watchlist];
+    if (filterFavorites) {
+      data = data.filter(e => e.isFavorite);
+    }
     if (sortType === 'updated') {
       return data.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
     } else {
       return data.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [watchlist, sortType]);
+  }, [watchlist, sortType, filterFavorites]);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -250,27 +266,12 @@ const App: React.FC = () => {
   const addAnimeToLibrary = async (anime: Anime, initialWatched: number) => {
     if (!user) return;
     
-    // Optimistic UI for Adding
-    const tempId = `temp-${Date.now()}`;
-    const tempEntry: WatchListEntry = {
-      id: tempId,
-      animeId: anime.mal_id,
-      title: anime.title,
-      imageUrl: anime.images.jpg.large_image_url,
-      totalEpisodes: anime.episodes,
-      watchedEpisodes: initialWatched,
-      genres: anime.genres.map(g => g.name),
-      score: anime.score ?? null,
-      synopsis: anime.synopsis ?? null,
-      updatedAt: new Date().toISOString(),
-      pending: true
-    };
-    
-    setWatchlist(prev => [tempEntry, ...prev]);
-
+    // Using atomic Firestore batches ensures consistent data across Watchlist and History.
+    // Relying on Firestore persistence for "immediate" UI addition.
     try {
         const batch = db.batch();
-        const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist').doc();
+        const userRef = db.collection('users').doc(user.uid);
+        const watchlistRef = userRef.collection('watchlist').doc();
         
         batch.set(watchlistRef, {
           animeId: anime.mal_id,
@@ -281,11 +282,12 @@ const App: React.FC = () => {
           genres: anime.genres.map(g => g.name),
           score: anime.score ?? null,
           synopsis: anime.synopsis ?? null,
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+          isFavorite: false
         });
 
         if (initialWatched > 0) {
-            const historyRef = db.collection('users').doc(user.uid).collection('history').doc();
+            const historyRef = userRef.collection('history').doc();
             batch.set(historyRef, {
                 animeId: anime.mal_id,
                 animeTitle: anime.title,
@@ -294,72 +296,98 @@ const App: React.FC = () => {
             });
         }
 
-        await batch.commit();
+        // Commit in background
+        batch.commit().catch(err => {
+          setError(`BACKGROUND_SYNC_FAILED: ${err.message}`);
+        });
     } catch (err: any) {
-        setError(`WRITE_ERROR: ${err.message}`);
-        // Revert optimistic add
-        setWatchlist(prev => prev.filter(e => e.id !== tempId));
+        setError(`DATABASE_WRITE_FAILURE: ${err.message}`);
     }
   };
 
-  const performSyncUpdate = async (entry: WatchListEntry, finalAmount: number, delta: number) => {
+  const performSyncUpdate = async (entry: WatchListEntry, finalAmount: number) => {
     if (!user) return;
-    setPendingOpsCount(prev => Math.max(0, prev - 1));
     
     try {
+        const delta = finalAmount - (syncQueue.current[entry.id]?.initialWatched || entry.watchedEpisodes);
         const batch = db.batch();
-        const entryRef = db.collection('users').doc(user.uid).collection('watchlist').doc(entry.id);
-        const historyRef = db.collection('users').doc(user.uid).collection('history').doc();
+        const userRef = db.collection('users').doc(user.uid);
+        const entryRef = userRef.collection('watchlist').doc(entry.id);
+        const historyRef = userRef.collection('history').doc();
 
         batch.update(entryRef, {
           watchedEpisodes: finalAmount,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
 
-        batch.set(historyRef, {
-          animeId: entry.animeId,
-          animeTitle: entry.title,
-          episodesDelta: delta,
-          timestamp: firebase.firestore.FieldValue.serverTimestamp()
-        });
+        if (delta !== 0) {
+            batch.set(historyRef, {
+              animeId: entry.animeId,
+              animeTitle: entry.title,
+              episodesDelta: delta,
+              timestamp: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
 
         await batch.commit();
     } catch (err: any) {
-        setError(`DEBOUNCED_SYNC_ERROR: ${err.message}`);
+        setError(`CLOUD_SYNC_ERROR: ${err.message}`);
+    } finally {
+        setPendingOpsCount(prev => Math.max(0, prev - 1));
+        delete syncQueue.current[entry.id];
     }
   };
 
   const updateEpisodesOptimistic = (entry: WatchListEntry, newAmount: number) => {
     if (!user) return;
     
-    // 1. Update Application State Immediately (Optimistic)
+    // Local state management for responsive UI before Firestore persistence kicks in
     setWatchlist(prev => prev.map(e => e.id === entry.id ? { ...e, watchedEpisodes: newAmount, pending: true } : e));
 
-    // 2. Debounce Cloud Sync
     if (syncQueue.current[entry.id]) {
       clearTimeout(syncQueue.current[entry.id].timer);
-      const initialWatched = syncQueue.current[entry.id].initialWatched;
-      
-      syncQueue.current[entry.id] = {
-        initialWatched,
-        delta: newAmount - initialWatched,
-        timer: setTimeout(() => {
-          const { delta } = syncQueue.current[entry.id];
-          performSyncUpdate(entry, newAmount, delta);
-          delete syncQueue.current[entry.id];
-        }, 2000)
-      };
+      syncQueue.current[entry.id].timer = setTimeout(() => {
+        performSyncUpdate(entry, newAmount);
+      }, 800);
     } else {
       setPendingOpsCount(prev => prev + 1);
       syncQueue.current[entry.id] = {
         initialWatched: entry.watchedEpisodes,
-        delta: newAmount - entry.watchedEpisodes,
         timer: setTimeout(() => {
-          const { delta } = syncQueue.current[entry.id];
-          performSyncUpdate(entry, newAmount, delta);
-          delete syncQueue.current[entry.id];
-        }, 2000)
+          performSyncUpdate(entry, newAmount);
+        }, 800)
       };
+    }
+  };
+
+  const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
+    if (!user) return;
+    try {
+      // Optimistic update
+      setWatchlist(prev => prev.map(e => e.id === id ? { ...e, isFavorite: !currentStatus } : e));
+      
+      await db.collection('users').doc(user.uid).collection('watchlist').doc(id).update({
+        isFavorite: !currentStatus,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    } catch (err: any) {
+      setError(`FAVORITE_SYNC_ERROR: ${err.message}`);
+    }
+  };
+
+  const handleRemoveAnime = async (id: string) => {
+    if (!user) return;
+    if (!window.confirm("WARNING: Purge record from cloud?")) return;
+
+    // Optimistic Deletion
+    const originalWatchlist = [...watchlist];
+    setWatchlist(prev => prev.filter(e => e.id !== id));
+
+    try {
+      await db.collection('users').doc(user.uid).collection('watchlist').doc(id).delete();
+    } catch (err: any) {
+      setError(`PURGE_FAILURE: ${err.message}`);
+      setWatchlist(originalWatchlist);
     }
   };
 
@@ -407,7 +435,7 @@ const App: React.FC = () => {
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
               </svg>
               <span>Sign In with Google</span>
             </button>
@@ -440,13 +468,13 @@ const App: React.FC = () => {
                  <div className="flex items-center gap-2 text-amber-500 animate-pulse">
                     <UploadCloud className="w-3.5 h-3.5 animate-bounce" />
                     <span className="text-[10px] font-mono font-bold hidden md:inline">
-                      {pendingOpsCount > 0 ? `${pendingOpsCount} PENDING_OPS` : 'UPLINKING...'}
+                      {isPerformingManualSync.current ? 'VERIFYING_CLOUD...' : 'UPLOADING_BUFFER...'}
                     </span>
                  </div>
                ) : (
                  <div className="flex items-center gap-2 text-accent">
-                    <Cloud className="w-4 h-4 group-hover/sync:scale-110 transition-transform" />
-                    <span className="text-[10px] font-mono font-bold hidden md:inline">SYNCHRONIZED</span>
+                    <ShieldCheck className="w-4 h-4 group-hover/sync:scale-110 transition-transform" />
+                    <span className="text-[10px] font-mono font-bold hidden md:inline">CLOUD_ACKNOWLEDGED</span>
                  </div>
                )}
             </button>
@@ -457,7 +485,7 @@ const App: React.FC = () => {
                 <span className="text-xs font-bold text-accent leading-none mb-1 flex items-center gap-2">
                    <UserCheck className="w-3 h-3 text-accent" /> {user.displayName || 'ANON_RUNNER'}
                 </span>
-                <span className="text-[9px] text-gray-500 uppercase tracking-widest">{lastSyncTime ? `SYNC_OK: ${lastSyncTime.toLocaleTimeString()}` : 'INITIALIZING...'}</span>
+                <span className="text-[9px] text-gray-500 uppercase tracking-widest">{lastSyncTime ? `CLOUD_SYNCED: ${lastSyncTime.toLocaleTimeString()}` : 'INITIALIZING_NEURAL_LINK...'}</span>
             </div>
             <div className="flex items-center gap-4">
                 <button onClick={() => setShowProfile(true)} className="w-10 h-10 border border-gray-700 hover:border-accent transition-all flex items-center justify-center overflow-hidden bg-black relative">
@@ -475,7 +503,7 @@ const App: React.FC = () => {
           <div className={`mb-8 p-4 border flex items-center justify-between gap-4 animate-fade-in ${isOffline ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-cyber-pink/10 border-cyber-pink text-cyber-pink'}`}>
             <div className="flex items-center gap-3">
                {isOffline ? <CloudOff className="w-6 h-6" /> : <AlertTriangle className="w-6 h-6" />}
-               <div><h3 className="font-bold font-mono tracking-wider">{isOffline ? 'OFFLINE_MODE' : 'SYNC_PROTOCOL_ERROR'}</h3><p className="text-xs font-mono opacity-80">{isOffline ? 'LOCAL_CACHE_ONLY. RECONNECT TO UPLOAD.' : error}</p></div>
+               <div><h3 className="font-bold font-mono tracking-wider">{isOffline ? 'OFFLINE_MODE' : 'CLOUD_LINK_ERROR'}</h3><p className="text-xs font-mono opacity-80">{isOffline ? 'DATA PROTECTED IN LOCAL BUFFER. RECONNECT TO UPLOAD.' : error}</p></div>
             </div>
             <button onClick={() => setError('')} className="p-2 hover:bg-white/10 rounded"><X className="w-5 h-5" /></button>
           </div>
@@ -503,22 +531,29 @@ const App: React.FC = () => {
           <div className="flex flex-col sm:flex-row items-end justify-between mb-8 gap-4 border-b border-[var(--border-color)] pb-4">
             <div className="flex items-center gap-4">
                 <h2 className="text-3xl font-black text-[var(--text-color)] flex items-center gap-3 uppercase">MEMORY BANK <span className="text-lg font-mono font-normal text-accent border border-accent px-2 py-0.5">{watchlist.length}</span></h2>
-                <button onClick={syncData} disabled={isSyncing} className={`p-2 border border-gray-800 text-gray-600 hover:text-accent hover:border-accent transition-all rounded-full ${isSyncing ? 'animate-spin' : ''}`}><RefreshCw className="w-4 h-4" /></button>
+                <button onClick={syncData} disabled={isSyncing} className={`p-2 border border-gray-800 text-gray-600 hover:text-accent hover:border-accent transition-all rounded-full ${isSyncing ? 'animate-spin' : ''}`} title="Verify Deep Cloud Sync"><RefreshCw className="w-4 h-4" /></button>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-mono text-gray-500 uppercase">Sort:</span>
+              <span className="text-[10px] font-mono text-gray-500 uppercase">Filters:</span>
               <div className="flex gap-1">
+                <button 
+                  onClick={() => setFilterFavorites(!filterFavorites)} 
+                  className={`px-3 py-1 text-[10px] font-mono border flex items-center gap-1.5 transition-all ${filterFavorites ? 'bg-yellow-400/20 border-yellow-400 text-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.2)]' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}
+                >
+                  <Star className={`w-3 h-3 ${filterFavorites ? 'fill-yellow-400' : ''}`} /> Favorites
+                </button>
+                <div className="w-px h-4 bg-gray-800 mx-1 self-center" />
                 <button onClick={() => setSortType('updated')} className={`px-3 py-1 text-[10px] font-mono border ${sortType === 'updated' ? 'bg-accent/20 border-accent text-accent' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}>Recent</button>
                 <button onClick={() => setSortType('title')} className={`px-3 py-1 text-[10px] font-mono border ${sortType === 'title' ? 'bg-accent/20 border-accent text-accent' : 'border-gray-800 text-gray-500 hover:border-gray-600'}`}>Alpha</button>
               </div>
             </div>
           </div>
 
-          {watchlist.length === 0 ? (
+          {sortedWatchlist.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 border border-dashed border-gray-800 bg-white/5">
               <Ghost className="w-16 h-16 text-gray-800 mb-4" />
-              <p className="font-mono text-gray-500 text-lg uppercase">Memory Void</p>
-              <p className="font-mono text-gray-700 text-[10px] mt-2 tracking-widest uppercase">Search to populate</p>
+              <p className="font-mono text-gray-500 text-lg uppercase">{filterFavorites ? 'No Favorites Found' : 'Memory Void'}</p>
+              <p className="font-mono text-gray-700 text-[10px] mt-2 tracking-widest uppercase">{filterFavorites ? 'Mark records as favorite to see them here' : 'Search to populate'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
@@ -527,11 +562,8 @@ const App: React.FC = () => {
                   key={entry.id} 
                   entry={entry} 
                   onUpdateEpisodes={updateEpisodesOptimistic} 
-                  onRemove={(id) => {
-                    if (window.confirm("WARNING: Purge record?")) {
-                      db.collection('users').doc(user.uid).collection('watchlist').doc(id).delete();
-                    }
-                  }} 
+                  onToggleFavorite={handleToggleFavorite}
+                  onRemove={handleRemoveAnime} 
                 />
               ))}
             </div>

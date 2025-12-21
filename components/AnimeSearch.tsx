@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Search, Plus, Loader2, X, WifiOff, Hourglass, AlertTriangle, Sparkles, Database, BookmarkCheck, Filter, ChevronRight } from 'lucide-react';
+import { Search, Plus, Loader2, X, WifiOff, Hourglass, AlertTriangle, Sparkles, Database, BookmarkCheck, Filter, ChevronRight, RefreshCw } from 'lucide-react';
 import { searchAnime } from '../services/jikanService';
 import { getAnimeRecommendations } from '../services/geminiService';
 import { Anime, WatchListEntry } from '../types';
@@ -18,6 +18,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   const [showResults, setShowResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedGenre, setSelectedGenre] = useState<string>('ALL');
+  const [retryCount, setRetryCount] = useState(0); // Used to trigger search manually
   
   // AI State
   const [showAiModal, setShowAiModal] = useState(false);
@@ -30,32 +31,44 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
+  const performSearch = async (searchQuery: string) => {
+    if (searchQuery.length <= 2) {
+      setResults([]);
+      setShowResults(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSelectedGenre('ALL');
+    
+    try {
+      const data = await searchAnime(searchQuery);
+      setResults(data);
+      setShowResults(true);
+    } catch (err: any) {
+      setResults([]);
+      setError(err.message || "Failed to fetch results");
+      setShowResults(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       if (query.length > 2) {
-        setLoading(true);
-        setError(null);
-        setSelectedGenre('ALL');
-        try {
-          const data = await searchAnime(query);
-          setResults(data);
-          setShowResults(true);
-        } catch (err: any) {
-          setResults([]);
-          setError(err.message || "Failed to fetch results");
-          setShowResults(true);
-        } finally {
-          setLoading(false);
-        }
+        performSearch(query);
       } else {
         setResults([]);
         setShowResults(false);
         setError(null);
       }
-    }, 500);
+    }, 300); // Tuned for better performance
 
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, retryCount]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,6 +79,11 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRetryCount(prev => prev + 1);
+  };
 
   // Compute available genres and their counts from the raw search results
   const genreData = useMemo(() => {
@@ -131,9 +149,44 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   };
 
   const getErrorConfig = (msg: string) => {
-    if (msg.includes("Network:")) return { icon: WifiOff, text: msg.replace("Network:", "").trim(), color: "text-amber-500" };
-    if (msg.includes("RateLimit:")) return { icon: Hourglass, text: "Uplink congested. Wait...", color: "text-orange-500" };
-    return { icon: AlertTriangle, text: msg.replace("Error:", "").trim(), color: "text-red-500" };
+    if (msg.includes("Network:")) {
+      return { 
+        icon: WifiOff, 
+        text: "OFFLINE_UPLINK", 
+        subtext: "Check your neural connection settings.", 
+        color: "text-amber-500", 
+        borderColor: "border-amber-500/30",
+        bgColor: "bg-amber-500/5"
+      };
+    }
+    if (msg.includes("RateLimit:")) {
+      return { 
+        icon: Hourglass, 
+        text: "CONGESTED_DATA_STREAM", 
+        subtext: "External API is rate-limiting our requests.", 
+        color: "text-orange-500", 
+        borderColor: "border-orange-500/30",
+        bgColor: "bg-orange-500/5"
+      };
+    }
+    if (msg.includes("Server:")) {
+      return { 
+        icon: AlertTriangle, 
+        text: "EXTERNAL_CORE_FAILURE", 
+        subtext: "Jikan API server is currently unresponsive.", 
+        color: "text-red-500", 
+        borderColor: "border-red-500/30",
+        bgColor: "bg-red-500/5"
+      };
+    }
+    return { 
+      icon: AlertTriangle, 
+      text: "GENERAL_ACCESS_FAULT", 
+      subtext: msg.replace("Error:", "").trim(), 
+      color: "text-red-400", 
+      borderColor: "border-red-500/20",
+      bgColor: "bg-red-500/5"
+    };
   };
 
   return (
@@ -173,11 +226,24 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
             </div>
           ) : error ? (
             (() => {
-              const { icon: Icon, text, color } = getErrorConfig(error);
+              const config = getErrorConfig(error);
+              const Icon = config.icon;
               return (
-                <div className={`p-6 flex flex-col items-center justify-center ${color} gap-3 text-center border-l-2 border-red-500`}>
-                  <Icon className="w-8 h-8 opacity-80" />
-                  <span className="font-mono text-sm uppercase">{text}</span>
+                <div className={`p-8 flex flex-col items-center justify-center gap-4 text-center border-l-4 ${config.borderColor} ${config.bgColor}`}>
+                  <div className={`p-3 border ${config.borderColor} rounded-full`}>
+                    <Icon className={`w-8 h-8 ${config.color} opacity-80`} />
+                  </div>
+                  <div className="space-y-1">
+                    <h5 className={`font-mono text-sm font-black uppercase tracking-[0.2em] ${config.color}`}>{config.text}</h5>
+                    <p className="text-[10px] font-mono text-gray-500 uppercase">{config.subtext}</p>
+                  </div>
+                  <button 
+                    onClick={handleRetry}
+                    className={`mt-2 flex items-center gap-2 px-6 py-2 border font-mono text-[10px] uppercase tracking-widest transition-all hover:bg-white/10 ${config.borderColor} ${config.color}`}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    Execute_Retry
+                  </button>
                 </div>
               );
             })()

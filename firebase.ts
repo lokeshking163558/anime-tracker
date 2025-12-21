@@ -21,25 +21,26 @@ const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : fir
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// Transport optimization: Remove forced long polling to allow standard WebSockets
-// which are generally more stable and faster in modern environments.
+// Use recommended transport settings for web environments
 db.settings({
-  experimentalAutoDetectLongPolling: true
+  experimentalAutoDetectLongPolling: true,
+  cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
 });
 
 const storage = firebase.storage();
 
-// Enable Firestore Offline Persistence with better handling
+// Enable Firestore Offline Persistence with better multi-tab support
+// This allows the app to work offline but prioritizes cloud sync when available
 db.enablePersistence({ synchronizeTabs: true })
   .catch((err) => {
     if (err.code == 'failed-precondition') {
-        console.warn("Persistence failed: Multiple tabs open. Syncing via network.");
+        console.warn("Persistence failed: Multiple tabs open.");
     } else if (err.code == 'unimplemented') {
         console.warn("Persistence not supported by browser.");
     }
   });
 
-// Set Auth Persistence
+// Set Auth Persistence to LOCAL to survive browser restarts
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
   .catch(() => {
     return auth.setPersistence(firebase.auth.Auth.Persistence.SESSION);

@@ -1,3 +1,4 @@
+
 import { Anime } from '../types';
 
 const BASE_URL = 'https://api.jikan.moe/v4';
@@ -9,14 +10,8 @@ interface JikanResponse {
   };
 }
 
-// Simple rate limit handling: delay requests slightly if needed
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 export const searchAnime = async (query: string): Promise<Anime[]> => {
   if (!query) return [];
-  
-  // Artificial delay to prevent hitting Jikan rate limits too hard during rapid typing
-  await delay(300); 
   
   try {
     const response = await fetch(`${BASE_URL}/anime?q=${encodeURIComponent(query)}&limit=10&sfw=true`);

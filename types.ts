@@ -32,6 +32,7 @@ export interface WatchListEntry {
   pending?: boolean; // True if data has not yet synced to the cloud
   score: number | null;
   synopsis: string | null;
+  isFavorite?: boolean;
 }
 
 export interface WatchHistoryItem {
