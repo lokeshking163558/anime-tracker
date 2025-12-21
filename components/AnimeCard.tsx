@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, UploadCloud, BookOpen, BookOpenCheck } from 'lucide-react';
+import { Plus, Minus, Trash2, Activity, RefreshCw, Star, ChevronDown, ChevronUp, Database, UploadCloud, BookOpen, BookOpenCheck, Terminal, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WatchListEntry } from '../types';
 import { GENRE_COLORS } from '../constants';
@@ -45,6 +45,14 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     onUpdateEpisodes(entry, newAmount);
   };
 
+  const handleMarkAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (entry.totalEpisodes === null) return;
+    
+    setOptimisticWatched(entry.totalEpisodes);
+    onUpdateEpisodes(entry, entry.totalEpisodes);
+  };
+
   const handleToggleFav = (e: React.MouseEvent) => {
     e.stopPropagation();
     onToggleFavorite(entry.id, !!entry.isFavorite);
@@ -64,7 +72,7 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
     ? (optimisticWatched / entry.totalEpisodes) * 100 
     : 0;
 
-  const hasLongSynopsis = entry.synopsis && entry.synopsis.length > 180;
+  const hasLongSynopsis = entry.synopsis && entry.synopsis.length > 160;
 
   return (
     <div 
@@ -140,9 +148,20 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
             <span className={`transition-colors flex items-center gap-1 ${entry.pending ? 'text-amber-500/70' : 'text-gray-500 group-hover:text-accent'} ${isExpanded ? 'text-accent' : ''}`}>
                <Activity className="w-3 h-3" /> PROGRESS
             </span>
-            <span className={entry.pending ? 'text-amber-500' : 'text-[var(--text-color)]'}>
-              {optimisticWatched} <span className="text-gray-500">/ {entry.totalEpisodes !== null ? entry.totalEpisodes : '?'}</span>
-            </span>
+            <div className="flex items-center gap-2">
+              {entry.totalEpisodes !== null && optimisticWatched < entry.totalEpisodes && (
+                <button 
+                  onClick={handleMarkAll}
+                  className="text-[8px] px-1.5 py-0.5 border border-accent/40 text-accent hover:bg-accent hover:text-black transition-all uppercase flex items-center gap-1 font-bold group/allbtn"
+                  title="Mark All Episodes Watched"
+                >
+                  <Check className="w-2.5 h-2.5" /> ALL
+                </button>
+              )}
+              <span className={entry.pending ? 'text-amber-500' : 'text-[var(--text-color)]'}>
+                {optimisticWatched} <span className="text-gray-500">/ {entry.totalEpisodes !== null ? entry.totalEpisodes : '?'}</span>
+              </span>
+            </div>
           </div>
 
           <div className={`w-full bg-gray-900/40 h-1.5 mb-4 border overflow-hidden rounded-sm transition-colors ${entry.pending ? 'border-amber-900/50' : 'border-gray-800'}`}>
@@ -188,26 +207,47 @@ export const AnimeCard: React.FC<AnimeCardProps> = ({ entry, onUpdateEpisodes, o
               className="overflow-hidden mt-6 border-t border-white/10 pt-4"
             >
                <div className="flex items-center gap-2 mb-2 text-accent">
-                 <Database className="w-3.5 h-3.5" />
+                 <Terminal className="w-3.5 h-3.5" />
                  <span className="text-[10px] font-mono font-bold tracking-widest uppercase">Memory_Extract</span>
                </div>
                
                {entry.synopsis ? (
-                 <div className="space-y-3">
-                    <p className={`text-[11px] font-sans leading-relaxed text-gray-400 italic transition-all duration-300 ${isFullSynopsis ? '' : 'line-clamp-3'}`}>
-                      {entry.synopsis}
-                    </p>
+                 <div className="space-y-3 relative">
+                    <motion.div 
+                      className="relative overflow-hidden transition-all duration-500"
+                      initial={false}
+                      animate={{ maxHeight: isFullSynopsis ? '1000px' : '4.5rem' }}
+                    >
+                      <p className="text-[11px] font-sans leading-relaxed text-gray-400 italic">
+                        {entry.synopsis}
+                      </p>
+                      
+                      {/* Gradient Mask for truncated state */}
+                      <AnimatePresence>
+                        {!isFullSynopsis && hasLongSynopsis && (
+                          <motion.div 
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[var(--card-bg)] to-transparent pointer-events-none"
+                          />
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
                     
                     {hasLongSynopsis && (
                       <button 
                         onClick={toggleSynopsis}
-                        className="flex items-center gap-1.5 text-[9px] font-mono text-accent hover:text-white transition-colors uppercase tracking-widest border border-accent/20 px-2 py-1 bg-accent/5 hover:bg-accent/20"
+                        className="group/synbtn flex items-center gap-1.5 text-[9px] font-mono text-accent hover:text-white transition-all uppercase tracking-widest border border-accent/20 px-2 py-1.5 bg-accent/5 hover:bg-accent/20 relative overflow-hidden"
                       >
-                        {isFullSynopsis ? (
-                          <><BookOpenCheck className="w-3 h-3" /> TRUNCATE_LOG</>
-                        ) : (
-                          <><BookOpen className="w-3 h-3" /> READ_FULL_LOG</>
-                        )}
+                        <div className="absolute inset-0 bg-white/5 -translate-x-full group-hover/synbtn:translate-x-0 transition-transform duration-300" />
+                        <span className="relative z-10 flex items-center gap-1.5">
+                          {isFullSynopsis ? (
+                            <><BookOpenCheck className="w-3 h-3" /> [ COLLAPSE_LOG ]</>
+                          ) : (
+                            <><BookOpen className="w-3 h-3" /> [ DECRYPT_FULL_SYNOPSIS ]</>
+                          )}
+                        </span>
                       </button>
                     )}
                  </div>
