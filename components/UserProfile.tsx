@@ -1,16 +1,16 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import firebase from 'firebase/compat/app';
+import * as XLSX from 'xlsx';
 import { auth, storage, db } from '../firebase';
-import { UserStats, ThemeSettings } from '../types';
+import { UserStats, ThemeSettings, WatchListEntry } from '../types';
 import { formatMinutes } from '../services/statsService';
-import { X, User as UserIcon, Save, Key, AlertCircle, CheckCircle, Database, Camera, Loader2, Zap, ShieldCheck, Palette, Moon, Sun, Monitor, Paintbrush } from 'lucide-react';
+import { X, User as UserIcon, Save, Key, AlertCircle, CheckCircle, Database, Camera, Loader2, Zap, ShieldCheck, Palette, Moon, Sun, Monitor, Paintbrush, FileDown, Share2, Upload, FileJson, FileSpreadsheet } from 'lucide-react';
 import { CyberButton, CyberInput, CyberCard, GlitchText } from './CyberUI';
 
 interface UserProfileProps {
   user: firebase.User;
   stats: UserStats;
-  animeCount: number;
+  watchlist: WatchListEntry[];
   themeSettings: ThemeSettings | null;
   onClose: () => void;
 }
@@ -23,12 +23,13 @@ const ACCENT_PRESETS = [
   { name: 'Amber', color: '#ffb000' }
 ];
 
-export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCount, themeSettings, onClose }) => {
+export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist, themeSettings, onClose }) => {
   const [displayName, setDisplayName] = useState(user.displayName || '');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const [currentMode, setCurrentMode] = useState<'dark' | 'light'>(themeSettings?.mode || 'dark');
   const [currentAccent, setCurrentAccent] = useState(themeSettings?.accentColor || '#00ff9f');
@@ -65,7 +66,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
         }
       }, { merge: true });
       setMessage({ type: 'success', text: 'NEURAL_THEME_LINKED' });
-      // Clear success message after a bit
       setTimeout(() => setMessage(null), 3000);
     } catch (err: any) {
       setMessage({ type: 'error', text: `THEME_SYNC_FAILED: ${err.message}` });
@@ -132,6 +132,184 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
     reader.readAsDataURL(file);
   };
 
+  const exportToCSV = () => {
+    if (watchlist.length === 0) {
+      setMessage({ type: 'error', text: 'EXPORT_FAILED: MEMORY BANK IS EMPTY.' });
+      return;
+    }
+
+    // Comprehensive Headers for full restore capability
+    const headers = [
+        "MAL_ID", 
+        "Title", 
+        "ImageURL", 
+        "Episodes Watched", 
+        "Total Episodes", 
+        "Genres", 
+        "Score", 
+        "Synopsis", 
+        "IsFavorite"
+    ];
+    
+    const rows = watchlist.map(entry => {
+      const fields = [
+        entry.animeId,
+        `"${entry.title.replace(/"/g, '""')}"`,
+        `"${entry.imageUrl}"`,
+        entry.watchedEpisodes,
+        entry.totalEpisodes || "",
+        `"${entry.genres.join(';').replace(/"/g, '""')}"`,
+        entry.score || "",
+        `"${(entry.synopsis || "").replace(/"/g, '""')}"`,
+        entry.isFavorite ? "TRUE" : "FALSE"
+      ];
+      return fields.join(",");
+    });
+
+    const csvContent = "\uFEFF" + headers.join(",") + "\n" + rows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `anitrack_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    setMessage({ type: 'success', text: 'DATA_EXPORT_SUCCESSFUL: ARCHIVE CREATED' });
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const handleImportData = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file extension (CSV or Excel)
+    const validExtensions = ['.csv', '.xlsx', '.xls'];
+    if (!validExtensions.some(ext => file.name.endsWith(ext))) {
+        setMessage({ type: 'error', text: 'INVALID_PROTOCOL: ONLY .CSV OR .XLSX FILES SUPPORTED' });
+        return;
+    }
+
+    setLoading(true);
+    setMessage({ type: 'success', text: 'DECRYPTING_FILE_STREAM...' });
+
+    const reader = new FileReader();
+    
+    reader.onload = async (event) => {
+        const data = event.target?.result;
+        if (!data) return;
+
+        try {
+            // Read binary data using SheetJS
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // Assume data is in the first sheet
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // Convert sheet to JSON array
+            const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+            if (jsonData.length === 0) throw new Error("FILE_EMPTY_OR_UNREADABLE");
+
+            const batch = db.batch();
+            const watchlistRef = db.collection('users').doc(user.uid).collection('watchlist');
+            const historyRef = db.collection('users').doc(user.uid).collection('history');
+            
+            let importCount = 0;
+            const BATCH_LIMIT = 400; // Safeguard Firestore limits
+
+            for (const row of jsonData) {
+                if (importCount >= BATCH_LIMIT) break;
+
+                // Normalize Keys (Handle Case Sensitivity and Variations)
+                // We create a normalized object to lookup values regardless of case
+                const normalizedRow: any = {};
+                Object.keys(row).forEach(key => {
+                    normalizedRow[key.toLowerCase().trim()] = row[key];
+                });
+
+                // Extract Fields with fallbacks for different header names
+                const mal_id = normalizedRow['mal_id'] || normalizedRow['id'] || normalizedRow['anime_id'];
+                const title = normalizedRow['title'] || normalizedRow['name'] || normalizedRow['anime'];
+                
+                if (!mal_id || !title) continue; // Skip invalid rows
+
+                const animeId = parseInt(mal_id);
+                // Skip if already in library
+                if (watchlist.some(w => w.animeId === animeId)) continue;
+
+                // Parse other fields
+                const imageUrl = normalizedRow['imageurl'] || normalizedRow['image'] || normalizedRow['poster'] || "";
+                const watched = parseInt(normalizedRow['episodes watched'] || normalizedRow['watched'] || normalizedRow['completed'] || "0");
+                const total = parseInt(normalizedRow['total episodes'] || normalizedRow['total'] || normalizedRow['episodes'] || "0");
+                
+                let genreArray: string[] = [];
+                const rawGenres = normalizedRow['genres'] || normalizedRow['genre'] || "";
+                if (typeof rawGenres === 'string') {
+                    // Handle comma or semicolon separated genres
+                    genreArray = rawGenres.split(/[;,]/).map((g: string) => g.trim());
+                }
+
+                const score = parseFloat(normalizedRow['score'] || normalizedRow['rating'] || "0") || null;
+                const synopsis = normalizedRow['synopsis'] || normalizedRow['summary'] || null;
+                
+                // Handle Boolean for favorites (Excel might use TRUE/FALSE, 1/0, "TRUE"/"FALSE")
+                let isFav = false;
+                const rawFav = normalizedRow['isfavorite'] || normalizedRow['favorite'];
+                if (rawFav === true || rawFav === 'TRUE' || rawFav === 1) isFav = true;
+
+                // Create Firestore Refs
+                const docRef = watchlistRef.doc();
+                
+                batch.set(docRef, {
+                    animeId: animeId,
+                    title: title,
+                    imageUrl: imageUrl,
+                    watchedEpisodes: isNaN(watched) ? 0 : watched,
+                    totalEpisodes: isNaN(total) || total === 0 ? null : total,
+                    genres: genreArray,
+                    score: score,
+                    synopsis: synopsis,
+                    isFavorite: isFav,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                // Add History Entry if watched > 0
+                if (watched > 0) {
+                    const hRef = historyRef.doc();
+                    batch.set(hRef, {
+                        animeId: animeId,
+                        animeTitle: title,
+                        episodesDelta: watched,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                }
+                
+                importCount++;
+            }
+
+            if (importCount > 0) {
+                await batch.commit();
+                setMessage({ type: 'success', text: `NEURAL_INJECTION_COMPLETE: ${importCount} NEW NODES LINKED` });
+            } else {
+                setMessage({ type: 'error', text: "DATA_REDUNDANT: NO NEW RECORDS FOUND" });
+            }
+
+        } catch (err: any) {
+            console.error(err);
+            setMessage({ type: 'error', text: `CORRUPT_DATA_STREAM: ${err.message}` });
+        } finally {
+            setLoading(false);
+            if (importInputRef.current) importInputRef.current.value = "";
+        }
+    };
+
+    reader.readAsArrayBuffer(file);
+  };
+
   const joinDate = user.metadata.creationTime 
     ? new Date(user.metadata.creationTime).toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' })
     : 'UNKNOWN';
@@ -140,7 +318,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in overflow-y-auto">
       <CyberCard className="w-full max-w-lg my-auto shadow-[0_0_50px_rgba(0,0,0,0.5)]">
         
-        {/* Header Bar */}
         <div className="flex items-center justify-between mb-8 border-b border-accent/20 pb-4">
           <div className="flex items-center gap-3">
              <Database className="w-5 h-5 text-cyber-pink animate-pulse" />
@@ -197,7 +374,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
             </div>
         </div>
 
-        {/* Customization Section */}
         <div className="mb-8 p-6 bg-accent/5 border border-accent/20 relative overflow-hidden">
           <div className="absolute top-0 right-0 p-2 opacity-10"><Monitor className="w-12 h-12" /></div>
           <div className="flex items-center gap-2 mb-6 border-b border-accent/10 pb-2">
@@ -206,7 +382,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
           </div>
           
           <div className="space-y-8">
-            {/* Mode Toggle */}
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-mono text-gray-500 uppercase flex items-center gap-2 tracking-widest">
                 <Sun className="w-3 h-3" /> Visual_Atmosphere
@@ -227,7 +402,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
               </div>
             </div>
 
-            {/* Accent Colors */}
             <div className="flex flex-col gap-3">
               <span className="text-[10px] font-mono text-gray-500 uppercase flex items-center gap-2 tracking-widest">
                 <Paintbrush className="w-3 h-3" /> Sync_Accent_Uplink
@@ -258,10 +432,39 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
           </div>
         </div>
 
-        {/* Stats Strip */}
+        {/* Data Management Section */}
+        <div className="mb-8 p-6 bg-cyber-pink/5 border border-cyber-pink/20 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-2 opacity-10"><Share2 className="w-12 h-12 text-cyber-pink" /></div>
+            <div className="flex items-center gap-2 mb-6 border-b border-cyber-pink/10 pb-2">
+                <Database className="w-4 h-4 text-cyber-pink" />
+                <h4 className="text-xs font-mono font-bold text-cyber-pink uppercase tracking-[0.2em]">Neural Portability</h4>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <p className="text-[9px] font-mono text-gray-500 leading-relaxed uppercase">Export your memory bank to a portable CSV for external archive.</p>
+                    <CyberButton onClick={exportToCSV} className="w-full text-[10px] flex items-center justify-center gap-2">
+                        <FileDown className="w-4 h-4" /> EXPORT_DATA
+                    </CyberButton>
+                </div>
+                <div className="space-y-2">
+                    <p className="text-[9px] font-mono text-gray-500 leading-relaxed uppercase">Inject external CSV/Excel data directly into the neural network.</p>
+                    <CyberButton 
+                      onClick={() => importInputRef.current?.click()} 
+                      disabled={loading}
+                      className="w-full text-[10px] flex items-center justify-center gap-2 border-cyber-pink/30 hover:border-cyber-pink text-gray-300 hover:text-cyber-pink"
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} 
+                        IMPORT_CORE
+                    </CyberButton>
+                    <input type="file" ref={importInputRef} onChange={handleImportData} className="hidden" accept=".csv, .xlsx, .xls" />
+                </div>
+            </div>
+        </div>
+
         <div className="grid grid-cols-3 gap-2 mb-8">
            {[
-             { label: "ENTRIES", value: animeCount, color: "text-accent" },
+             { label: "ENTRIES", value: watchlist.length, color: "text-accent" },
              { label: "HOURS", value: formatMinutes(stats.lifetimeMinutes).split(' ')[0], color: "text-cyber-pink" },
              { label: "EPISODES", value: Math.floor(stats.lifetimeMinutes / 24), color: "text-blue-400" }
            ].map((stat, i) => (
@@ -272,7 +475,6 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
            ))}
         </div>
 
-        {/* Edit Form */}
         <div className="border-t border-gray-800 pt-8 space-y-6">
             {message && (
               <div className={`p-4 border font-mono text-xs flex items-center gap-3 animate-fade-in ${
@@ -281,7 +483,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
                   : 'bg-red-900/10 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(239,44,44,0.1)]'
               }`}>
                   {message.type === 'success' ? <CheckCircle className="w-4 h-4 text-green-500"/> : <AlertCircle className="w-4 h-4 text-red-500"/>}
-                  <span className="flex-1">{message.text}</span>
+                  <span className="flex-1 text-[10px] tracking-tight">{message.text}</span>
                   <button onClick={() => setMessage(null)} className="opacity-50 hover:opacity-100"><X className="w-3 h-3" /></button>
               </div>
             )}
@@ -297,7 +499,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, animeCoun
                      />
                   </div>
                   <CyberButton type="submit" primary disabled={loading || uploading} className="h-[52px]">
-                     <Save className="w-4 h-4" />
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   </CyberButton>
                </div>
             </form>

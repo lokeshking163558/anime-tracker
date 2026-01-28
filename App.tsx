@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import firebase from 'firebase/compat/app';
 import { auth, db, googleProvider } from './firebase';
@@ -117,11 +116,6 @@ const App: React.FC = () => {
     return val;
   };
 
-  /**
-   * Deep Sync: 
-   * Forces a refresh of the local cache from the Cloud.
-   * Optimized with a timeout to prevent hanging on zombie connections.
-   */
   const syncData = async () => {
     if (!user || isPerformingManualSync.current) return;
     isPerformingManualSync.current = true;
@@ -130,9 +124,9 @@ const App: React.FC = () => {
 
     try {
       if (!isOffline) {
-        // Timeout after 5s if writes are blocked
+        // Reduced timeout for better responsiveness
         const waitPromise = db.waitForPendingWrites();
-        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 5000));
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("TIMEOUT")), 3000));
         await Promise.race([waitPromise, timeoutPromise]).catch(() => {
           console.warn("Deep Sync: Pending writes taking too long, proceeding anyway.");
         });
@@ -179,9 +173,14 @@ const App: React.FC = () => {
 
     const userRef = db.collection('users').doc(user.uid);
     
-    // onSnapshot is naturally optimistic. When persistence is enabled,
-    // it updates the local state as soon as a write is initiated.
+    // Using includeMetadataChanges: true allows us to see local writes immediately
+    // even before the server acknowledges them.
     const unsubWatchlist = userRef.collection('watchlist').onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+      
+      // If we are currently manipulating state optimistically via manual functions, 
+      // we can sometimes skip the snapshot update to prevent "jumping" UI if needed,
+      // but Firestore's local cache is usually the source of truth.
+      
       const list = snapshot.docs.map(doc => {
         const data = doc.data();
         return {
@@ -263,32 +262,56 @@ const App: React.FC = () => {
       auth.signOut();
   };
 
+  // --- OPTIMISTIC UPDATES & BACKGROUND SYNC ---
+
   const addAnimeToLibrary = async (anime: Anime, initialWatched: number) => {
     if (!user) return;
     
-    // Using atomic Firestore batches ensures consistent data across Watchlist and History.
-    // Relying on Firestore persistence for "immediate" UI addition.
+    // 1. Generate IDs client-side immediately
+    const userRef = db.collection('users').doc(user.uid);
+    const watchlistDoc = userRef.collection('watchlist').doc();
+    const historyDoc = userRef.collection('history').doc();
+    
+    // 2. Create the Optimistic Entry
+    const newEntry: WatchListEntry = {
+      id: watchlistDoc.id,
+      animeId: anime.mal_id,
+      title: anime.title,
+      imageUrl: anime.images.jpg.large_image_url,
+      totalEpisodes: anime.episodes,
+      watchedEpisodes: initialWatched,
+      genres: anime.genres.map(g => g.name),
+      score: anime.score ?? null,
+      synopsis: anime.synopsis ?? null,
+      updatedAt: new Date().toISOString(), // Local time for immediate sort
+      isFavorite: false,
+      pending: true // UI indicator
+    };
+
+    // 3. Update State Immediately (0ms latency feedback)
+    // We filter to prevent potential duplicates if user clicks twice fast
+    setWatchlist(prev => {
+        if (prev.some(x => x.animeId === anime.mal_id)) return prev;
+        return [newEntry, ...prev];
+    });
+
+    // 4. Perform Background Sync
     try {
         const batch = db.batch();
-        const userRef = db.collection('users').doc(user.uid);
-        const watchlistRef = userRef.collection('watchlist').doc();
         
-        batch.set(watchlistRef, {
-          animeId: anime.mal_id,
-          title: anime.title,
-          imageUrl: anime.images.jpg.large_image_url,
-          totalEpisodes: anime.episodes,
-          watchedEpisodes: initialWatched,
-          genres: anime.genres.map(g => g.name),
-          score: anime.score ?? null,
-          synopsis: anime.synopsis ?? null,
+        // Prepare data for server (strip UI-only fields if needed, handle timestamps)
+        const serverData = {
+          ...newEntry,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-          isFavorite: false
-        });
+          pending: false // Stored as false on server
+        };
+        // @ts-ignore - removing 'id' as it's the doc key
+        delete serverData.id;
+
+        batch.set(watchlistDoc, serverData);
 
         if (initialWatched > 0) {
-            const historyRef = userRef.collection('history').doc();
-            batch.set(historyRef, {
+            batch.set(historyDoc, {
                 animeId: anime.mal_id,
                 animeTitle: anime.title,
                 episodesDelta: initialWatched,
@@ -296,12 +319,13 @@ const App: React.FC = () => {
             });
         }
 
-        // Commit in background
-        batch.commit().catch(err => {
-          setError(`BACKGROUND_SYNC_FAILED: ${err.message}`);
-        });
+        // Fire and forget (or await if we want to catch errors here, but UI is already unblocked)
+        await batch.commit();
     } catch (err: any) {
+        console.error("Optimistic Add Failed:", err);
         setError(`DATABASE_WRITE_FAILURE: ${err.message}`);
+        // Rollback state on failure
+        setWatchlist(prev => prev.filter(item => item.id !== watchlistDoc.id));
     }
   };
 
@@ -332,6 +356,8 @@ const App: React.FC = () => {
         await batch.commit();
     } catch (err: any) {
         setError(`CLOUD_SYNC_ERROR: ${err.message}`);
+        // Note: Complex rollback for updates is tricky, usually the snapshot listener 
+        // will correct the state if the write failed and we refresh.
     } finally {
         setPendingOpsCount(prev => Math.max(0, prev - 1));
         delete syncQueue.current[entry.id];
@@ -341,37 +367,47 @@ const App: React.FC = () => {
   const updateEpisodesOptimistic = (entry: WatchListEntry, newAmount: number) => {
     if (!user) return;
     
-    // Local state management for responsive UI before Firestore persistence kicks in
-    setWatchlist(prev => prev.map(e => e.id === entry.id ? { ...e, watchedEpisodes: newAmount, pending: true } : e));
+    // Update local state immediately, including UpdatedAt so it jumps to top if sorted by recent
+    const now = new Date().toISOString();
+    
+    setWatchlist(prev => prev.map(e => 
+      e.id === entry.id 
+        ? { ...e, watchedEpisodes: newAmount, pending: true, updatedAt: now } 
+        : e
+    ));
 
+    // Debounce the network call
     if (syncQueue.current[entry.id]) {
       clearTimeout(syncQueue.current[entry.id].timer);
       syncQueue.current[entry.id].timer = setTimeout(() => {
         performSyncUpdate(entry, newAmount);
-      }, 800);
+      }, 1000); // 1s debounce
     } else {
       setPendingOpsCount(prev => prev + 1);
       syncQueue.current[entry.id] = {
         initialWatched: entry.watchedEpisodes,
         timer: setTimeout(() => {
           performSyncUpdate(entry, newAmount);
-        }, 800)
+        }, 1000)
       };
     }
   };
 
   const handleToggleFavorite = async (id: string, currentStatus: boolean) => {
     if (!user) return;
+    
+    // Optimistic Update
+    setWatchlist(prev => prev.map(e => e.id === id ? { ...e, isFavorite: !currentStatus } : e));
+    
     try {
-      // Optimistic update
-      setWatchlist(prev => prev.map(e => e.id === id ? { ...e, isFavorite: !currentStatus } : e));
-      
       await db.collection('users').doc(user.uid).collection('watchlist').doc(id).update({
         isFavorite: !currentStatus,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
       });
     } catch (err: any) {
       setError(`FAVORITE_SYNC_ERROR: ${err.message}`);
+      // Rollback
+      setWatchlist(prev => prev.map(e => e.id === id ? { ...e, isFavorite: currentStatus } : e));
     }
   };
 
@@ -379,7 +415,7 @@ const App: React.FC = () => {
     if (!user) return;
     if (!window.confirm("WARNING: Purge record from cloud?")) return;
 
-    // Optimistic Deletion
+    // Optimistic Remove
     const originalWatchlist = [...watchlist];
     setWatchlist(prev => prev.filter(e => e.id !== id));
 
@@ -387,6 +423,7 @@ const App: React.FC = () => {
       await db.collection('users').doc(user.uid).collection('watchlist').doc(id).delete();
     } catch (err: any) {
       setError(`PURGE_FAILURE: ${err.message}`);
+      // Rollback
       setWatchlist(originalWatchlist);
     }
   };
@@ -571,7 +608,7 @@ const App: React.FC = () => {
         </section>
       </main>
 
-      {showProfile && user && <UserProfile user={user} stats={stats} animeCount={watchlist.length} themeSettings={themeSettings} onClose={() => setShowProfile(false)} />}
+      {showProfile && user && <UserProfile user={user} stats={stats} watchlist={watchlist} themeSettings={themeSettings} onClose={() => setShowProfile(false)} />}
       {showHistory && <HistoryModal history={history} watchlist={watchlist} onClose={() => setShowHistory(false)} onUpdate={async (id, data) => {
         await db.collection('users').doc(user.uid).collection('history').doc(id).update(data);
       }} onDelete={async (id) => {

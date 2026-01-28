@@ -1,91 +1,52 @@
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "framer-motion": "https://esm.sh/framer-motion@^12.29.2",
+    "xlsx": "https://esm.sh/xlsx@0.18.5"
+  }
+}
+</script>
 
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AniTrack - Your Anime Journey</title>
+    <title>AniTrack // Neural Link</title>
     <link rel="icon" type="image/svg+xml" href="/logo.svg" />
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        darkMode: 'class',
-        theme: {
-          extend: {
-            colors: {
-              cyber: {
-                black: '#050505',
-                green: '#00ff9f',
-                pink: '#ff0055',
-                blue: '#00baee',
-                purple: '#bc13fe',
-                gray: '#1a1a1a',
-              },
-              accent: 'var(--accent-color)',
-              'accent-dim': 'var(--accent-dim)',
-            },
-            fontFamily: {
-              mono: ['"Courier New"', 'Courier', 'monospace'],
-              sans: ['"Quicksand"', 'sans-serif'],
-            },
-            animation: {
-              'fade-in': 'fadeIn 0.3s ease-out',
-              'slide-up': 'slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-              'spin-slow': 'spin 8s linear infinite',
-              'pulse-fast': 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-              'neon-pulse': 'pulseGlow 3s infinite',
-            },
-            keyframes: {
-              fadeIn: {
-                '0%': { opacity: '0' },
-                '100%': { opacity: '1' },
-              },
-              slideUp: {
-                '0%': { transform: 'translateY(20px)', opacity: '0' },
-                '100%': { transform: 'translateY(0)', opacity: '1' },
-              },
-              pulseGlow: {
-                '0%, 100%': { filter: 'drop-shadow(0 0 2px var(--accent-dim))' },
-                '50%': { filter: 'drop-shadow(0 0 8px var(--accent-color)) drop-shadow(0 0 15px var(--accent-dim))' },
-              }
-            }
-          },
-        },
-      }
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;700;900&display=swap');
+      
       :root {
-        --accent-color: #00ff9f;
-        --accent-dim: rgba(0, 255, 159, 0.4);
-        --bg-color: #000000;
-        --card-bg: rgba(5, 5, 5, 0.8);
-        --text-color: #e5e5e5;
+        --bg-color: #050505;
+        --text-color: #e0e0e0;
+        --card-bg: rgba(20, 20, 25, 0.6);
         --border-color: rgba(255, 255, 255, 0.1);
+        --accent-color: #00ff9f;
+        --accent-dim: rgba(0, 255, 159, 0.2);
+        --cyber-pink: #ff0055;
+        --cyber-blue: #00baee;
+        --cyber-purple: #bc13fe;
         --input-bg: rgba(0, 0, 0, 0.5);
       }
 
       body {
-        font-family: 'Quicksand', sans-serif;
         background-color: var(--bg-color);
         color: var(--text-color);
-        transition: background-color 0.5s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+        font-family: 'Inter', sans-serif;
+        overflow-x: hidden;
       }
-
-      .dark {
-        --bg-color: #000000;
-        --card-bg: rgba(8, 8, 8, 0.9);
-        --text-color: #e5e5e5;
-        --border-color: rgba(255, 255, 255, 0.1);
-        --input-bg: rgba(0, 0, 0, 0.5);
-      }
-
-      .light {
-        --bg-color: #f5f7f9;
-        --card-bg: rgba(255, 255, 255, 0.95);
-        --text-color: #1a1a1a;
-        --border-color: rgba(0, 0, 0, 0.08);
-        --input-bg: rgba(255, 255, 255, 0.8);
+      
+      .font-mono {
+        font-family: 'JetBrains Mono', monospace;
       }
 
       /* Custom Scrollbar */
@@ -94,45 +55,18 @@
         height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: transparent; 
+        background: #000;
       }
       ::-webkit-scrollbar-thumb {
-        background: #333; 
-        border-radius: 0;
+        background: #333;
+        border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: var(--accent-color); 
-      }
-      
-      .clip-corner {
-        clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
-      }
-
-      .text-shadow-accent {
-        text-shadow: 0 0 10px var(--accent-dim);
-      }
-      
-      .theme-transition {
-        transition: all 0.3s ease;
+        background: var(--accent-color);
       }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "firebase/": "https://aistudiocdn.com/firebase@^12.6.0/",
-    "lucide-react": "https://aistudiocdn.com/lucide-react@^0.555.0",
-    "vite": "https://aistudiocdn.com/vite@^7.2.6",
-    "@vitejs/plugin-react": "https://aistudiocdn.com/@vitejs/plugin-react@^5.1.1",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0",
-    "framer-motion": "https://aistudiocdn.com/framer-motion@^11.0.8"
-  }
-}
-</script>
-</head>
-  <body class="antialiased">
+  </head>
+  <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
