@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Plus, Loader2, X, WifiOff, Hourglass, AlertTriangle, Sparkles, Database, BookmarkCheck, Filter, ChevronRight, RefreshCw } from 'lucide-react';
 import { searchAnime } from '../services/jikanService';
@@ -19,6 +18,10 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   const [error, setError] = useState<string | null>(null);
   const [selectedGenre, setSelectedGenre] = useState<string>('ALL');
   const [retryCount, setRetryCount] = useState(0); // Used to trigger search manually
+  
+  // Keyboard Navigation State
+  const [activeIndex, setActiveIndex] = useState(-1);
+  const resultsListRef = useRef<HTMLDivElement>(null);
   
   // AI State
   const [showAiModal, setShowAiModal] = useState(false);
@@ -42,6 +45,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
     setLoading(true);
     setError(null);
     setSelectedGenre('ALL');
+    setActiveIndex(-1); // Reset keyboard selection
     
     try {
       const data = await searchAnime(searchQuery);
@@ -65,7 +69,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
         setShowResults(false);
         setError(null);
       }
-    }, 300); // Tuned for better performance
+    }, 500); // Increased debounce to 500ms to reduce rate limits
 
     return () => clearTimeout(timer);
   }, [query, retryCount]);
@@ -109,11 +113,50 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
     );
   }, [results, selectedGenre]);
 
+  // Reset active index when list changes
+  useEffect(() => {
+    setActiveIndex(-1);
+  }, [filteredResults]);
+
+  // Scroll active item into view
+  useEffect(() => {
+    if (activeIndex >= 0 && resultsListRef.current) {
+      const items = resultsListRef.current.querySelectorAll('[data-result-item]');
+      if (items[activeIndex]) {
+        items[activeIndex].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+  }, [activeIndex]);
+
   const handleInitiateAdd = (anime: Anime) => {
     if (watchlist.some(w => w.animeId === anime.mal_id)) return;
     setSelectedAnime(anime);
     setWatchedInput('0');
     setShowResults(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!showResults) return;
+
+    if (e.key === 'Escape') {
+        setShowResults(false);
+        return;
+    }
+
+    if (filteredResults.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev < filteredResults.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActiveIndex(prev => (prev > 0 ? prev - 1 : -1));
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && activeIndex < filteredResults.length) {
+        e.preventDefault();
+        handleInitiateAdd(filteredResults[activeIndex]);
+      }
+    }
   };
 
   const handleConfirmAdd = (e: React.FormEvent) => {
@@ -149,44 +192,10 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   };
 
   const getErrorConfig = (msg: string) => {
-    if (msg.includes("Network:")) {
-      return { 
-        icon: WifiOff, 
-        text: "OFFLINE_UPLINK", 
-        subtext: "Check your neural connection settings.", 
-        color: "text-amber-500", 
-        borderColor: "border-amber-500/30",
-        bgColor: "bg-amber-500/5"
-      };
-    }
-    if (msg.includes("RateLimit:")) {
-      return { 
-        icon: Hourglass, 
-        text: "CONGESTED_DATA_STREAM", 
-        subtext: "External API is rate-limiting our requests.", 
-        color: "text-orange-500", 
-        borderColor: "border-orange-500/30",
-        bgColor: "bg-orange-500/5"
-      };
-    }
-    if (msg.includes("Server:")) {
-      return { 
-        icon: AlertTriangle, 
-        text: "EXTERNAL_CORE_FAILURE", 
-        subtext: "Jikan API server is currently unresponsive.", 
-        color: "text-red-500", 
-        borderColor: "border-red-500/30",
-        bgColor: "bg-red-500/5"
-      };
-    }
-    return { 
-      icon: AlertTriangle, 
-      text: "GENERAL_ACCESS_FAULT", 
-      subtext: msg.replace("Error:", "").trim(), 
-      color: "text-red-400", 
-      borderColor: "border-red-500/20",
-      bgColor: "bg-red-500/5"
-    };
+    if (msg.includes("Network:")) return { icon: WifiOff, text: "OFFLINE_UPLINK", subtext: "Check your neural connection settings.", color: "text-amber-500", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/5" };
+    if (msg.includes("RateLimit:")) return { icon: Hourglass, text: "CONGESTED_DATA_STREAM", subtext: "External API is rate-limiting our requests.", color: "text-orange-500", borderColor: "border-orange-500/30", bgColor: "bg-orange-500/5" };
+    if (msg.includes("Server:")) return { icon: AlertTriangle, text: "EXTERNAL_CORE_FAILURE", subtext: "Jikan API server is currently unresponsive.", color: "text-red-500", borderColor: "border-red-500/30", bgColor: "bg-red-500/5" };
+    return { icon: AlertTriangle, text: "GENERAL_ACCESS_FAULT", subtext: msg.replace("Error:", "").trim(), color: "text-red-400", borderColor: "border-red-500/20", bgColor: "bg-red-500/5" };
   };
 
   return (
@@ -198,6 +207,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => { if (results.length > 0 || error) setShowResults(true); }}
+            onKeyDown={handleKeyDown}
             placeholder="Input title sequence..."
           />
         </div>
@@ -280,26 +290,31 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
               )}
 
               {/* Filtered Results List */}
-              <div className="overflow-y-auto custom-scrollbar flex-1 max-h-96">
+              <div ref={resultsListRef} className="overflow-y-auto custom-scrollbar flex-1 max-h-96 scroll-smooth">
                 {filteredResults.length === 0 ? (
                   <div className="p-10 text-center text-gray-600 font-mono text-xs uppercase tracking-widest flex flex-col items-center gap-3">
                     <Database className="w-8 h-8 opacity-10" />
                     <span>No results found in {selectedGenre} archive</span>
                   </div>
                 ) : (
-                  filteredResults.map((anime) => {
+                  filteredResults.map((anime, index) => {
                     const isInLibrary = watchlist.some(w => w.animeId === anime.mal_id);
+                    const isActive = index === activeIndex;
                     return (
                       <div 
                         key={anime.mal_id} 
-                        className={`flex items-center p-3 cursor-pointer group border-b border-white/5 last:border-0 transition-all ${isInLibrary ? 'opacity-60 bg-white/5 cursor-default' : 'hover:bg-accent/10'}`}
+                        data-result-item
+                        className={`flex items-center p-3 cursor-pointer group border-b border-white/5 last:border-0 transition-all duration-200 
+                          ${isInLibrary ? 'opacity-60 bg-white/5 cursor-default' : 'hover:bg-accent/10'} 
+                          ${isActive ? 'bg-accent/10 border-l-2 border-accent pl-4' : 'border-l-0'}
+                        `}
                         onClick={() => handleInitiateAdd(anime)}
                       >
                         <div className="relative shrink-0">
                           <img 
                             src={anime.images.jpg.image_url} 
                             alt={anime.title} 
-                            className={`w-12 h-16 object-cover border border-white/20 transition-all ${isInLibrary ? 'grayscale' : 'group-hover:border-accent group-hover:scale-105'}`}
+                            className={`w-12 h-16 object-cover border border-white/20 transition-all ${isInLibrary ? 'grayscale' : 'group-hover:border-accent group-hover:scale-105'} ${isActive ? 'scale-105 border-accent' : ''}`}
                           />
                           {isInLibrary && (
                             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -308,7 +323,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
                           )}
                         </div>
                         <div className="ml-4 flex-1 min-w-0">
-                          <h4 className={`font-mono font-bold uppercase tracking-tight truncate transition-colors ${isInLibrary ? 'text-gray-500' : 'text-gray-200 group-hover:text-accent'}`}>
+                          <h4 className={`font-mono font-bold uppercase tracking-tight truncate transition-colors ${isInLibrary ? 'text-gray-500' : isActive ? 'text-accent' : 'text-gray-200 group-hover:text-accent'}`}>
                             {anime.title}
                           </h4>
                           <div className="text-[10px] font-mono text-gray-500 flex items-center gap-2 mt-1">
@@ -324,7 +339,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
                         ) : (
                           <button 
                             onClick={(e) => { e.stopPropagation(); handleInitiateAdd(anime); }}
-                            className="ml-3 p-2 border border-accent/30 text-accent group-hover:bg-accent group-hover:text-black group-hover:border-accent transition-all duration-300"
+                            className={`ml-3 p-2 border transition-all duration-300 ${isActive ? 'bg-accent text-black border-accent' : 'border-accent/30 text-accent group-hover:bg-accent group-hover:text-black group-hover:border-accent'}`}
                           >
                             <Plus className="w-4 h-4" />
                           </button>
