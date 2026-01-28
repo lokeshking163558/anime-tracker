@@ -300,13 +300,13 @@ const App: React.FC = () => {
         const batch = db.batch();
         
         // Prepare data for server (strip UI-only fields if needed, handle timestamps)
-        const serverData = {
+        // Extract 'id' to prevent writing it to the document body if desired, or just to handle logic cleanly
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { id, ...serverData } = {
           ...newEntry,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
           pending: false // Stored as false on server
         };
-        // @ts-ignore - removing 'id' as it's the doc key
-        delete serverData.id;
 
         batch.set(watchlistDoc, serverData);
 
