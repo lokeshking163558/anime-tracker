@@ -209,6 +209,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
             onFocus={() => { if (results.length > 0 || error) setShowResults(true); }}
             onKeyDown={handleKeyDown}
             placeholder="Input title sequence..."
+            autoComplete="off"
           />
         </div>
         
