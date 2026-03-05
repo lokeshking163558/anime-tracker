@@ -193,8 +193,8 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
 
   const getErrorConfig = (msg: string) => {
     if (msg.includes("Network:")) return { icon: WifiOff, text: "OFFLINE_UPLINK", subtext: "Check your neural connection settings.", color: "text-amber-500", borderColor: "border-amber-500/30", bgColor: "bg-amber-500/5" };
-    if (msg.includes("RateLimit:")) return { icon: Hourglass, text: "CONGESTED_DATA_STREAM", subtext: "External API is rate-limiting our requests.", color: "text-orange-500", borderColor: "border-orange-500/30", bgColor: "bg-orange-500/5" };
-    if (msg.includes("Server:")) return { icon: AlertTriangle, text: "EXTERNAL_CORE_FAILURE", subtext: "Jikan API server is currently unresponsive.", color: "text-red-500", borderColor: "border-red-500/30", bgColor: "bg-red-500/5" };
+    if (msg.includes("RateLimit:")) return { icon: Hourglass, text: "CONGESTED_DATA_STREAM", subtext: "External API is rate-limiting our requests. Please wait a moment.", color: "text-orange-500", borderColor: "border-orange-500/30", bgColor: "bg-orange-500/5" };
+    if (msg.includes("Server:")) return { icon: AlertTriangle, text: "EXTERNAL_CORE_FAILURE", subtext: "Jikan API server is currently unresponsive. Retrying may help.", color: "text-red-500", borderColor: "border-red-500/30", bgColor: "bg-red-500/5" };
     return { icon: AlertTriangle, text: "GENERAL_ACCESS_FAULT", subtext: msg.replace("Error:", "").trim(), color: "text-red-400", borderColor: "border-red-500/20", bgColor: "bg-red-500/5" };
   };
 
