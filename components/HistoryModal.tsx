@@ -47,8 +47,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ history, watchlist, 
         timestamp: new Date(editDate).toISOString()
       });
       setEditingId(null);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error(error?.message || String(error));
     } finally {
       setLoadingId(null);
     }
@@ -61,8 +61,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({ history, watchlist, 
     setLoadingId(id);
     try {
       await onDelete(id);
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      console.error(error?.message || String(error));
     } finally {
       setLoadingId(null);
     }

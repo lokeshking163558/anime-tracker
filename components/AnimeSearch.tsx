@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Search, Plus, Loader2, X, WifiOff, Hourglass, AlertTriangle, Sparkles, Database, BookmarkCheck, Filter, ChevronRight, RefreshCw } from 'lucide-react';
 import { searchAnime } from '../services/jikanService';
-import { getAnimeRecommendations } from '../services/geminiService';
+import { getAnimeRecommendations, Recommendation } from '../services/geminiService';
 import { Anime, WatchListEntry } from '../types';
 import { CyberInput, CyberButton, CyberCard, GlitchText } from './CyberUI';
 
@@ -26,7 +26,7 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   // AI State
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiRecommendations, setAiRecommendations] = useState<string>('');
+  const [aiRecommendations, setAiRecommendations] = useState<Recommendation[]>([]);
   
   // Modal State
   const [selectedAnime, setSelectedAnime] = useState<Anime | null>(null);
@@ -179,13 +179,13 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
   const handleAiRecommend = async () => {
     setShowAiModal(true);
     setAiLoading(true);
-    setAiRecommendations('');
+    setAiRecommendations([]);
     try {
       const titles = watchlist.map(w => w.title);
       const recs = await getAnimeRecommendations(titles);
       setAiRecommendations(recs);
-    } catch (err) {
-      setAiRecommendations("Neural link failed to generate suggestions.");
+    } catch (err: any) {
+      console.error(err?.message || String(err));
     } finally {
       setAiLoading(false);
     }
@@ -423,12 +423,20 @@ export const AnimeSearch: React.FC<AnimeSearchProps> = ({ onAddAnime, watchlist 
                       SYNC_DATE: {new Date().toLocaleDateString()}
                     </div>
                     <div className="space-y-6">
-                      {aiRecommendations.split('\n').filter(l => l.trim()).map((line, i) => (
-                        <div key={i} className="group flex gap-4 transition-all">
-                          <div className="text-accent mt-1 font-bold opacity-30 group-hover:opacity-100">0{i+1}</div>
-                          <p className="group-hover:text-accent transition-colors leading-relaxed">{line}</p>
-                        </div>
-                      ))}
+                      {aiRecommendations.length === 0 ? (
+                        <p className="text-center opacity-50">Neural link failed to generate suggestions.</p>
+                      ) : (
+                        aiRecommendations.map((rec, i) => (
+                          <div key={i} className="group flex flex-col gap-1 transition-all border-b border-white/5 pb-4 last:border-0">
+                            <div className="flex items-center gap-2">
+                              <div className="text-accent font-bold opacity-30 group-hover:opacity-100">0{i+1}</div>
+                              <h4 className="font-bold text-white group-hover:text-accent transition-colors">{rec.title}</h4>
+                            </div>
+                            <p className="text-xs text-gray-400 italic ml-8">"{rec.description}"</p>
+                            <p className="text-[10px] text-accent/60 ml-8 mt-1 font-mono uppercase tracking-tighter">Reason: {rec.reason}</p>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}

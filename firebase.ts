@@ -23,7 +23,7 @@ const db = firebase.firestore();
 
 // Use recommended transport settings for web environments
 db.settings({
-  experimentalAutoDetectLongPolling: true,
+  experimentalForceLongPolling: true,
   cacheSizeBytes: firebase.firestore.CACHE_SIZE_UNLIMITED
 });
 

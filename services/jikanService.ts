@@ -31,7 +31,7 @@ export const searchAnime = async (query: string): Promise<Anime[]> => {
     const data: JikanResponse = await response.json();
     return data.data || [];
   } catch (error: any) {
-    console.error("Failed to fetch anime:", error);
+    console.error("Failed to fetch anime:", error?.message || String(error));
     
     // Handle Network Errors (e.g. Offline)
     if (error.name === 'TypeError' && error.message === 'Failed to fetch') {

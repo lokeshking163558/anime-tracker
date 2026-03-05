@@ -37,7 +37,10 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist
   useEffect(() => {
     if (themeSettings) {
       setCurrentMode(themeSettings.mode);
-      setCurrentAccent(themeSettings.accentColor);
+      const activeAccent = themeSettings.mode === 'light'
+        ? (themeSettings.lightAccent?.color || themeSettings.accentColor)
+        : (themeSettings.darkAccent?.color || themeSettings.accentColor);
+      setCurrentAccent(activeAccent);
     }
   }, [themeSettings]);
 
@@ -58,12 +61,16 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist
   const handleSaveTheme = async (mode: 'dark' | 'light', colorObj: {name: string, color: string}) => {
     setLoading(true);
     try {
+      const themeData = {
+        mode,
+        accentColor: colorObj.color,
+        accentName: colorObj.name,
+        darkAccent: mode === 'dark' ? colorObj : (themeSettings?.darkAccent || { name: 'Emerald', color: '#00ff9f' }),
+        lightAccent: mode === 'light' ? colorObj : (themeSettings?.lightAccent || { name: 'Rose', color: '#ff0055' })
+      };
+
       await db.collection('users').doc(user.uid).set({
-        theme: {
-          mode,
-          accentColor: colorObj.color,
-          accentName: colorObj.name
-        }
+        theme: themeData
       }, { merge: true });
       setMessage({ type: 'success', text: 'NEURAL_THEME_LINKED' });
       setTimeout(() => setMessage(null), 3000);
@@ -299,7 +306,7 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist
             }
 
         } catch (err: any) {
-            console.error(err);
+            console.error(err?.message || String(err));
             setMessage({ type: 'error', text: `CORRUPT_DATA_STREAM: ${err.message}` });
         } finally {
             setLoading(false);
@@ -388,13 +395,19 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist
               </span>
               <div className="flex bg-black/40 p-1 border border-gray-800 gap-1 rounded-sm w-fit">
                  <button 
-                  onClick={() => handleSaveTheme('dark', ACCENT_PRESETS.find(p => p.color === currentAccent) || ACCENT_PRESETS[0])}
+                  onClick={() => {
+                    const darkAccent = themeSettings?.darkAccent || { name: 'Emerald', color: '#00ff9f' };
+                    handleSaveTheme('dark', darkAccent);
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 font-mono text-[10px] uppercase transition-all ${currentMode === 'dark' ? 'bg-accent/20 text-accent border border-accent/50' : 'text-gray-500 hover:text-gray-300'}`}
                  >
                    <Moon className="w-3 h-3" /> Dark_Net
                  </button>
                  <button 
-                  onClick={() => handleSaveTheme('light', ACCENT_PRESETS.find(p => p.color === currentAccent) || ACCENT_PRESETS[0])}
+                  onClick={() => {
+                    const lightAccent = themeSettings?.lightAccent || { name: 'Rose', color: '#ff0055' };
+                    handleSaveTheme('light', lightAccent);
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 font-mono text-[10px] uppercase transition-all ${currentMode === 'light' ? 'bg-accent/20 text-accent border border-accent/50' : 'text-gray-500 hover:text-gray-300'}`}
                  >
                    <Sun className="w-3 h-3" /> Day_Light
@@ -427,6 +440,25 @@ export const UserProfile: React.FC<UserProfileProps> = ({ user, stats, watchlist
                     </span>
                   </button>
                 ))}
+
+                {/* Custom Color Picker */}
+                <div className="relative group flex flex-col items-center gap-2 transition-transform hover:scale-110">
+                  <div className={`w-8 h-8 rounded-full border-2 transition-all overflow-hidden ${
+                    !ACCENT_PRESETS.some(p => p.color === currentAccent)
+                      ? 'border-white ring-4 ring-white/10 scale-110 shadow-[0_0_15px_var(--accent-dim)]' 
+                      : 'border-white/20 group-hover:border-white/50'
+                  }`}>
+                    <input 
+                      type="color" 
+                      value={currentAccent}
+                      onChange={(e) => handleSaveTheme(currentMode, { name: 'Custom', color: e.target.value })}
+                      className="absolute inset-0 w-[200%] h-[200%] -translate-x-1/4 -translate-y-1/4 cursor-pointer bg-transparent border-none"
+                    />
+                  </div>
+                  <span className={`text-[8px] font-mono uppercase tracking-tighter transition-colors ${!ACCENT_PRESETS.some(p => p.color === currentAccent) ? 'text-accent' : 'text-gray-600'}`}>
+                    Custom
+                  </span>
+                </div>
               </div>
             </div>
           </div>

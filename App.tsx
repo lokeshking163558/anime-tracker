@@ -89,9 +89,14 @@ const App: React.FC = () => {
   useEffect(() => {
     const root = document.documentElement;
     if (themeSettings) {
-      root.style.setProperty('--accent-color', themeSettings.accentColor);
+      // Determine active accent based on mode
+      const activeAccent = themeSettings.mode === 'light' 
+        ? (themeSettings.lightAccent?.color || themeSettings.accentColor)
+        : (themeSettings.darkAccent?.color || themeSettings.accentColor);
+
+      root.style.setProperty('--accent-color', activeAccent);
       try {
-        const hex = themeSettings.accentColor.replace('#', '');
+        const hex = activeAccent.replace('#', '');
         const r = parseInt(hex.substring(0, 2), 16);
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
