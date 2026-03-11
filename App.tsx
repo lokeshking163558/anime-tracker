@@ -8,13 +8,11 @@ import { AnimeCard } from './components/AnimeCard';
 import { StatsBoard } from './components/StatsBoard';
 import { UserProfile } from './components/UserProfile';
 import { HistoryModal } from './components/HistoryModal';
-import { PendingCatalog } from './components/PendingCatalog';
-import { NeuralAdvisor } from './components/NeuralAdvisor';
 import { HomePage } from './components/HomePage';
 import { CyberBackground, CyberButton, CyberInput, CyberCard, GlitchText } from './components/CyberUI';
 import { Logo } from './components/Logo';
 import { AmbientSound } from './components/AmbientSound';
-import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, UploadCloud, ShieldCheck, Star, Clock } from 'lucide-react';
+import { Loader2, LogOut, History, ArrowLeft, Ghost, Wifi, AlertTriangle, X, CloudOff, Cloud, RefreshCw, UserCheck, Zap, Palette, UploadCloud, ShieldCheck, Star } from 'lucide-react';
 
 const App: React.FC = () => {
   const [user, setUser] = useState<firebase.User | null>(null);
@@ -25,8 +23,6 @@ const App: React.FC = () => {
   const [filterFavorites, setFilterFavorites] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showPendingCatalog, setShowPendingCatalog] = useState(false);
-  const [showNeuralAdvisor, setShowNeuralAdvisor] = useState(false);
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
   const [hasPendingWrites, setHasPendingWrites] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -46,57 +42,13 @@ const App: React.FC = () => {
   const syncQueue = useRef<Record<string, { timer: ReturnType<typeof setTimeout>, initialWatched: number }>>({});
   const isPerformingManualSync = useRef(false);
 
-  // Global Error Sanitizer to prevent "Circular structure to JSON" crashes
-  useEffect(() => {
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    const sanitize = (args: any[]) => {
-      return args.map(arg => {
-        if (arg instanceof Error) return arg.message;
-        if (typeof arg === 'object' && arg !== null) {
-          try {
-            // Test if it's stringifiable
-            JSON.stringify(arg);
-            return arg;
-          } catch (e) {
-            return `[Circular or Non-Serializable Object: ${arg.constructor?.name || 'Object'}]`;
-          }
-        }
-        return arg;
-      });
-    };
-
-    console.error = (...args: any[]) => originalError(...sanitize(args));
-    console.warn = (...args: any[]) => originalWarn(...sanitize(args));
-
-    const handleRejection = (event: PromiseRejectionEvent) => {
-      if (event.reason?.message?.includes('circular')) {
-        event.preventDefault();
-      }
-    };
-
-    window.addEventListener('unhandledrejection', handleRejection);
-
-    return () => {
-      console.error = originalError;
-      console.warn = originalWarn;
-      window.removeEventListener('unhandledrejection', handleRejection);
-    };
-  }, []);
-
   // Apply theme to document
   useEffect(() => {
     const root = document.documentElement;
     if (themeSettings) {
-      // Determine active accent based on mode
-      const activeAccent = themeSettings.mode === 'light' 
-        ? (themeSettings.lightAccent?.color || themeSettings.accentColor)
-        : (themeSettings.darkAccent?.color || themeSettings.accentColor);
-
-      root.style.setProperty('--accent-color', activeAccent);
+      root.style.setProperty('--accent-color', themeSettings.accentColor);
       try {
-        const hex = activeAccent.replace('#', '');
+        const hex = themeSettings.accentColor.replace('#', '');
         const r = parseInt(hex.substring(0, 2), 16);
         const g = parseInt(hex.substring(2, 4), 16);
         const b = parseInt(hex.substring(4, 6), 16);
@@ -160,15 +112,8 @@ const App: React.FC = () => {
 
   const formatFirestoreDate = (val: any): string => {
     if (!val) return new Date().toISOString();
-    try {
-      if (typeof val.toDate === 'function') return val.toDate().toISOString();
-      if (val instanceof Date) return val.toISOString();
-      if (typeof val === 'string') return val;
-      // Handle Firestore FieldValue or other objects that might be passed
-      return new Date().toISOString();
-    } catch (e) {
-      return new Date().toISOString();
-    }
+    if (typeof val.toDate === 'function') return val.toDate().toISOString();
+    return val;
   };
 
   const syncData = async () => {
@@ -191,25 +136,19 @@ const App: React.FC = () => {
       const historyRef = db.collection('users').doc(user.uid).collection('history');
       
       const [wSnap, hSnap] = await Promise.all([
-        watchlistRef.get({ source: isOffline ? 'cache' : 'server' }).catch((err) => {
-          console.warn("Watchlist server fetch failed, falling back to cache:", err?.message || String(err));
-          return watchlistRef.get({ source: 'cache' });
-        }),
-        historyRef.get({ source: isOffline ? 'cache' : 'server' }).catch((err) => {
-          console.warn("History server fetch failed, falling back to cache:", err?.message || String(err));
-          return historyRef.get({ source: 'cache' });
-        })
+        watchlistRef.get({ source: isOffline ? 'cache' : 'server' }),
+        historyRef.get({ source: isOffline ? 'cache' : 'server' })
       ]);
       
       const wList = wSnap.docs.map(doc => ({ 
         id: doc.id, 
-        ...doc.data({ serverTimestamps: 'estimate' }),
+        ...doc.data(),
         updatedAt: formatFirestoreDate(doc.get('updatedAt'))
       })) as WatchListEntry[];
       
       const hList = hSnap.docs.map(doc => ({ 
         id: doc.id, 
-        ...doc.data({ serverTimestamps: 'estimate' }),
+        ...doc.data(),
         timestamp: formatFirestoreDate(doc.get('timestamp'))
       })) as WatchHistoryItem[];
       
@@ -217,7 +156,7 @@ const App: React.FC = () => {
       setHistory(hList);
       setLastSyncTime(new Date());
     } catch (err: any) {
-      console.error("Deep Sync failed:", err?.message || err?.code || "Unknown Error");
+      console.error("Deep Sync failed:", err);
       setError("UPLINK_STALL: Server verify failed. Re-linking to cache.");
     } finally {
       setIsSyncing(false);
@@ -237,8 +176,13 @@ const App: React.FC = () => {
     // Using includeMetadataChanges: true allows us to see local writes immediately
     // even before the server acknowledges them.
     const unsubWatchlist = userRef.collection('watchlist').onSnapshot({ includeMetadataChanges: true }, (snapshot) => {
+      
+      // If we are currently manipulating state optimistically via manual functions, 
+      // we can sometimes skip the snapshot update to prevent "jumping" UI if needed,
+      // but Firestore's local cache is usually the source of truth.
+      
       const list = snapshot.docs.map(doc => {
-        const data = doc.data({ serverTimestamps: 'estimate' });
+        const data = doc.data();
         return {
           id: doc.id,
           ...data,
@@ -257,7 +201,7 @@ const App: React.FC = () => {
 
     const unsubHistory = userRef.collection('history').onSnapshot((snapshot) => {
       const hist = snapshot.docs.map(doc => {
-        const data = doc.data({ serverTimestamps: 'estimate' });
+        const data = doc.data();
         return {
           id: doc.id,
           ...data,
@@ -306,56 +250,12 @@ const App: React.FC = () => {
     setError('');
     setFormLoading(true);
     try {
-      // 1. Fetch the OAuth URL from our server
-      const response = await fetch('/api/auth/google/url');
-      if (!response.ok) {
-        throw new Error('Failed to get auth URL from server');
-      }
-      const { url } = await response.json();
-
-      // 2. Open the OAuth PROVIDER's URL directly in popup
-      const authWindow = window.open(
-        url,
-        'oauth_popup',
-        'width=600,height=700'
-      );
-
-      if (!authWindow) {
-        throw new Error('Popup blocked. Please allow popups for this site.');
-      }
+      await auth.signInWithPopup(googleProvider);
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message.replace('Firebase: ', ''));
       setFormLoading(false);
     }
   };
-
-  // Listen for success message from popup
-  useEffect(() => {
-    const handleMessage = async (event: MessageEvent) => {
-      // Validate origin
-      const origin = event.origin;
-      if (!origin.endsWith('.run.app') && !origin.includes('localhost')) {
-        return;
-      }
-
-      if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
-        const { idToken } = event.data;
-        try {
-          const credential = firebase.auth.GoogleAuthProvider.credential(idToken);
-          await auth.signInWithCredential(credential);
-        } catch (err: any) {
-          setError(`Firebase Auth Error: ${err.message}`);
-          setFormLoading(false);
-        }
-      } else if (event.data?.type === 'OAUTH_AUTH_ERROR') {
-        setError(`OAuth Error: ${event.data.message}`);
-        setFormLoading(false);
-      }
-    };
-
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, []);
 
   const handleLogout = () => {
       setError('');
@@ -422,7 +322,7 @@ const App: React.FC = () => {
         // Fire and forget (or await if we want to catch errors here, but UI is already unblocked)
         await batch.commit();
     } catch (err: any) {
-        console.error("Optimistic Add Failed:", err?.message || err?.code || "Unknown Error");
+        console.error("Optimistic Add Failed:", err);
         setError(`DATABASE_WRITE_FAILURE: ${err.message}`);
         // Rollback state on failure
         setWatchlist(prev => prev.filter(item => item.id !== watchlistDoc.id));
@@ -649,17 +549,9 @@ const App: React.FC = () => {
         <section className="mb-16 animate-fade-in">
           <div className="flex items-end justify-between mb-8 border-b border-[var(--border-color)] pb-4">
              <div><h2 className="text-2xl font-black text-[var(--text-color)] uppercase tracking-tight mb-1">Data Overview</h2><div className="text-[10px] font-mono text-gray-500">NEURAL_DASHBOARD</div></div>
-             <div className="flex gap-2">
-               <button onClick={() => setShowNeuralAdvisor(true)} className="flex items-center gap-2 px-4 py-2 bg-cyber-pink/10 border border-cyber-pink/20 hover:border-cyber-pink text-cyber-pink text-xs font-mono transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(255,0,85,0.1)]">
-                 <Zap className="w-3 h-3" /> Neural_Advisor
-               </button>
-               <button onClick={() => setShowPendingCatalog(true)} className="flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/20 hover:border-accent text-accent text-xs font-mono transition-all uppercase tracking-wider">
-                 <Clock className="w-3 h-3" /> Pending_Checklist
-               </button>
-               <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-[var(--border-color)] hover:border-accent text-gray-400 text-xs font-mono transition-all uppercase tracking-wider">
-                 <History className="w-3 h-3" /> View Logs
-               </button>
-             </div>
+             <button onClick={() => setShowHistory(true)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-[var(--border-color)] hover:border-accent text-gray-400 text-xs font-mono transition-all uppercase tracking-wider">
+               <History className="w-3 h-3" /> View Logs
+             </button>
           </div>
           <StatsBoard stats={stats} />
         </section>
@@ -722,20 +614,6 @@ const App: React.FC = () => {
       }} onDelete={async (id) => {
         await db.collection('users').doc(user.uid).collection('history').doc(id).delete();
       }} />}
-      
-      <PendingCatalog 
-        isOpen={showPendingCatalog} 
-        onClose={() => setShowPendingCatalog(false)} 
-        watchlist={watchlist} 
-        onUpdateEpisodes={updateEpisodesOptimistic} 
-      />
-
-      <NeuralAdvisor
-        isOpen={showNeuralAdvisor}
-        onClose={() => setShowNeuralAdvisor(false)}
-        watchlist={watchlist}
-        onAddAnime={addAnimeToLibrary}
-      />
     </div>
   );
 };

@@ -3,26 +3,18 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "engines": {
-    "node": ">=18.0.0"
-  },
   "scripts": {
-    "dev": "tsx server.ts",
-    "build": "vite build",
-    "postbuild": "tsc --noEmit",
-    "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "*",
-    "@types/express": "^5.0.6",
-    "express": "^5.2.1",
     "firebase": "^10.8.0",
-    "framer-motion": "^11.0.8",
     "lucide-react": "^0.344.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "tsx": "^4.21.0",
+    "@google/genai": "*",
+    "framer-motion": "^11.0.8",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

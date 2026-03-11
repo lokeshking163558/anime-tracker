@@ -18,8 +18,6 @@ export interface ThemeSettings {
   mode: 'dark' | 'light';
   accentColor: string;
   accentName: string;
-  darkAccent?: { color: string; name: string };
-  lightAccent?: { color: string; name: string };
 }
 
 export interface WatchListEntry {
